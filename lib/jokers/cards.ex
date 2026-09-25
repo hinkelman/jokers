@@ -1,5 +1,4 @@
 defmodule Jokers.Cards do
-
   def suits() do
     [:hearts, :spades, :clubs, :diamonds]
   end
@@ -30,7 +29,11 @@ defmodule Jokers.Cards do
     %{draw_pile: draw_pile, hand: hand}
   end
 
-  @spec draw(list(tuple), list(tuple), list(tuple)) :: %{draw_pile: list(tuple), discard_pile: list(tuple), hand: list(tuple)}
+  @spec draw(list(tuple), list(tuple), list(tuple)) :: %{
+          draw_pile: list(tuple),
+          discard_pile: list(tuple),
+          hand: list(tuple)
+        }
   def draw([head | tail], hand, discard_pile) do
     %{draw_pile: tail, hand: [head | hand], discard_pile: discard_pile}
   end
@@ -40,7 +43,10 @@ defmodule Jokers.Cards do
     %{draw_pile: tl(x), hand: [hd(x) | hand], discard_pile: []}
   end
 
-  @spec discard(tuple(), list(tuple), list(tuple)) :: %{hand: list(tuple), discard_pile: list(tuple)}
+  @spec discard(tuple(), list(tuple), list(tuple)) :: %{
+          hand: list(tuple),
+          discard_pile: list(tuple)
+        }
   def discard(card, hand, discard_pile) do
     # List.delete removes only the first match; with three decks a hand can hold duplicate cards
     %{hand: List.delete(hand, card), discard_pile: [card | discard_pile]}

@@ -19,7 +19,7 @@ defmodule Jokers.CardsTest do
     assert length(deal1[:draw_pile]) == 156
     assert length(deal1[:hand]) == 6
 
-    deal2 = Cards.deal(deal1[:draw_pile], [hearts: :queen])
+    deal2 = Cards.deal(deal1[:draw_pile], hearts: :queen)
     assert length(deal2[:draw_pile]) == 151
     assert length(deal2[:hand]) == 6
   end

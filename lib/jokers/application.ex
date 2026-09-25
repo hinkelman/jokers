@@ -12,6 +12,9 @@ defmodule Jokers.Application do
       Jokers.Repo,
       {DNSCluster, query: Application.get_env(:jokers, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Jokers.PubSub},
+      # Each game runs in its own process, found by its id in the registry
+      {Registry, keys: :unique, name: Jokers.GameRegistry},
+      {DynamicSupervisor, name: Jokers.GameSupervisor, strategy: :one_for_one},
       # Start the Finch HTTP client for sending emails
       {Finch, name: Jokers.Finch},
       # Start a worker by calling: Jokers.Worker.start_link(arg)
