@@ -17,7 +17,8 @@ defmodule JokersWeb.Router do
   scope "/", JokersWeb do
     pipe_through :browser
 
-    get "/", PageController, :home
+    live "/", GameLive.Index
+    live "/games/:id", GameLive.Show
   end
 
   # Other scopes may use custom stacks.

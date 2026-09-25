@@ -24,6 +24,9 @@ defmodule Jokers.GameServer do
     GenServer.start_link(__MODULE__, {id, player_num, opts}, name: via(id))
   end
 
+  @spec exists?(term()) :: boolean()
+  def exists?(id), do: Registry.lookup(Jokers.GameRegistry, id) != []
+
   @spec subscribe(term()) :: :ok | {:error, term()}
   def subscribe(id), do: Phoenix.PubSub.subscribe(Jokers.PubSub, topic(id))
 
