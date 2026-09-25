@@ -9,7 +9,6 @@ defmodule Jokers.Application do
   def start(_type, _args) do
     children = [
       JokersWeb.Telemetry,
-      Jokers.Repo,
       {DNSCluster, query: Application.get_env(:jokers, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Jokers.PubSub},
       # Each game runs in its own process, found by its id in the registry

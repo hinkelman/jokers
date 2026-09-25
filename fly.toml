@@ -1,0 +1,32 @@
+# Fly.io configuration: https://fly.io/docs/reference/configuration/
+#
+# Games live only in the server's memory, so the app must run on exactly one machine
+# (deploy with `fly deploy --ha=false`) and that machine must stay running; stopping it
+# would lose every game in progress.
+
+app = "jokers-hinkelman"
+primary_region = "ord"
+kill_signal = "SIGTERM"
+
+[build]
+
+[env]
+  PHX_HOST = "jokers-hinkelman.fly.dev"
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 1000
+    soft_limit = 1000
+
+[[vm]]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1

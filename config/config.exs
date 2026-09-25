@@ -7,9 +7,7 @@
 # General application configuration
 import Config
 
-config :jokers,
-  ecto_repos: [Jokers.Repo],
-  generators: [timestamp_type: :utc_datetime]
+config :jokers, generators: [timestamp_type: :utc_datetime]
 
 # Configures the endpoint
 config :jokers, JokersWeb.Endpoint,
