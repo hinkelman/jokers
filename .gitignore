@@ -35,3 +35,6 @@ jokers-*.tar
 npm-debug.log
 /assets/node_modules/
 
+
+# Claude Code local settings (dev server launch config)
+/.claude/
