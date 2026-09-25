@@ -3,7 +3,8 @@ defmodule JokersWeb.GameLive.Show do
   A game in progress, seen by one player.
 
   The player's color is in the URL (`/games/:id?color=red`); without it the page asks which
-  color to play. On their turn a player picks a card, then one of its legal moves, which is
+  color to play. Opening the page with a color claims that seat for this browser's player id
+  (see `JokersWeb.Router`), and a seat someone else holds can't be taken. On their turn a player picks a card, then one of its legal moves, which is
   previewed on the board until they confirm it.
   """
 
@@ -14,11 +15,11 @@ defmodule JokersWeb.GameLive.Show do
   alias Jokers.{Board, GameServer}
 
   @impl true
-  def mount(%{"id" => id}, _session, socket) do
+  def mount(%{"id" => id}, session, socket) do
     if GameServer.exists?(id) do
       # the game process tells every player's page when something changes
       if connected?(socket), do: GameServer.subscribe(id)
-      {:ok, assign(socket, id: id, page_title: "Jokers · #{id}")}
+      {:ok, assign(socket, id: id, player_id: session["player_id"], page_title: "Jokers · #{id}")}
     else
       {:ok,
        socket |> put_flash(:error, "No game with the code \"#{id}\".") |> redirect(to: ~p"/")}
@@ -27,13 +28,32 @@ defmodule JokersWeb.GameLive.Show do
 
   @impl true
   def handle_params(params, _uri, socket) do
-    seats = GameServer.view(socket.assigns.id, nil).board.seats
+    %{id: id, player_id: player_id} = socket.assigns
+    seats = GameServer.view(id, nil).board.seats
     color = Enum.find(seats, &(Atom.to_string(&1) == params["color"]))
-    {:noreply, socket |> assign(color: color) |> load()}
+
+    case color && GameServer.claim(id, color, player_id) do
+      {:error, :taken} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Someone else is already playing #{color}.")
+         |> push_patch(to: ~p"/games/#{id}")}
+
+      _no_color_or_ok ->
+        {:noreply, socket |> assign(color: color) |> load()}
+    end
   end
 
   @impl true
-  def handle_info({:game_updated, _id}, socket), do: {:noreply, load(socket)}
+  def handle_info({:game_updated, _id}, socket) do
+    %{id: id, color: color, player_id: player_id} = socket.assigns
+    socket = load(socket)
+
+    # the seat was given up, perhaps from another tab
+    if color && socket.assigns.seats[color] != player_id,
+      do: {:noreply, push_patch(socket, to: ~p"/games/#{id}")},
+      else: {:noreply, socket}
+  end
 
   # fetches this player's view of the game and clears any card or move they had picked
   defp load(socket) do
@@ -43,6 +63,7 @@ defmodule JokersWeb.GameLive.Show do
 
     assign(socket,
       view: view,
+      seats: GameServer.seats(id),
       moves: moves,
       must_discard:
         moves != %{} and Enum.all?(moves, fn {_card, card_moves} -> card_moves == [] end),
@@ -73,6 +94,12 @@ defmodule JokersWeb.GameLive.Show do
   def handle_event("discard", _params, socket) do
     %{id: id, color: color} = socket.assigns
     result(socket, GameServer.discard(id, color, selected_card(socket.assigns)))
+  end
+
+  def handle_event("leave", _params, socket) do
+    %{id: id, color: color, player_id: player_id} = socket.assigns
+    :ok = GameServer.release(id, color, player_id)
+    {:noreply, push_patch(socket, to: ~p"/games/#{id}")}
   end
 
   def handle_event("next_game", _params, socket) do
@@ -111,17 +138,28 @@ defmodule JokersWeb.GameLive.Show do
         <:subtitle>Share this page's link with the other players. Which color are you?</:subtitle>
       </.header>
       <div class="grid grid-cols-2 gap-3">
-        <.link
-          :for={color <- @view.board.seats}
-          patch={~p"/games/#{@id}?color=#{color}"}
-          class="flex items-center gap-3 rounded-lg border border-zinc-300 p-3 font-semibold hover:bg-zinc-50"
-        >
-          <span
-            class="h-6 w-6 rounded-full border border-zinc-500"
-            style={"background: #{marble_color(color)}"}
-          />
-          <%= color %>
-        </.link>
+        <%= for color <- @view.board.seats do %>
+          <% holder = @seats[color] %>
+          <.link
+            :if={holder in [nil, @player_id]}
+            patch={~p"/games/#{@id}?color=#{color}"}
+            class="flex items-center gap-3 rounded-lg border border-zinc-300 p-3 font-semibold hover:bg-zinc-50"
+          >
+            <.seat_marble color={color} />
+            <%= color %>
+            <span class="ml-auto text-xs font-normal text-zinc-500">
+              <%= if holder, do: "yours", else: "free" %>
+            </span>
+          </.link>
+          <div
+            :if={holder not in [nil, @player_id]}
+            class="flex items-center gap-3 rounded-lg border border-zinc-200 bg-zinc-100 p-3 font-semibold text-zinc-400"
+          >
+            <.seat_marble color={color} />
+            <%= color %>
+            <span class="ml-auto text-xs font-normal">taken</span>
+          </div>
+        <% end %>
       </div>
       <p class="text-sm text-zinc-600">
         Teams: <%= team_names(@view.board, 0) %> against <%= team_names(@view.board, 1) %>.
@@ -159,6 +197,15 @@ defmodule JokersWeb.GameLive.Show do
             <%= if Board.acting_color(@view.board, @color) not in [@color, nil] do %>
               (helping <%= Board.acting_color(@view.board, @color) %>)
             <% end %>
+            ·
+            <button
+              type="button"
+              phx-click="leave"
+              data-confirm="Give up your seat so someone else can take it?"
+              class="underline hover:text-zinc-700"
+            >
+              Leave seat
+            </button>
           </p>
           <p class="text-xl font-semibold">
             <%= cond do %>
@@ -242,6 +289,17 @@ defmodule JokersWeb.GameLive.Show do
         </div>
       </div>
     </div>
+    """
+  end
+
+  attr :color, :atom, required: true
+
+  defp seat_marble(assigns) do
+    ~H"""
+    <span
+      class="h-6 w-6 rounded-full border border-zinc-500"
+      style={"background: #{marble_color(@color)}"}
+    />
     """
   end
 

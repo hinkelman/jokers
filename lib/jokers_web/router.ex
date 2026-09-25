@@ -8,6 +8,7 @@ defmodule JokersWeb.Router do
     plug :put_root_layout, html: {JokersWeb.Layouts, :root}
     plug :protect_from_forgery
     plug :put_secure_browser_headers
+    plug :put_player_id
   end
 
   pipeline :api do
@@ -19,6 +20,16 @@ defmodule JokersWeb.Router do
 
     live "/", GameLive.Index
     live "/games/:id", GameLive.Show
+  end
+
+  # Gives each browser a random id, kept in the session cookie, so a player keeps their seat
+  # in a game when they reload the page.
+  defp put_player_id(conn, _opts) do
+    if get_session(conn, :player_id) do
+      conn
+    else
+      put_session(conn, :player_id, Base.url_encode64(:crypto.strong_rand_bytes(16)))
+    end
   end
 
   # Other scopes may use custom stacks.

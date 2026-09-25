@@ -37,6 +37,33 @@ defmodule JokersWeb.GameLiveTest do
     assert render(view) =~ "Waiting for red"
   end
 
+  test "a color can only be taken once", %{conn: conn} do
+    # two browsers, each with its own player id in its session
+    conn = init_test_session(conn, %{player_id: "ann"})
+    other = init_test_session(build_conn(), %{player_id: "bob"})
+
+    id = start_game()
+    {:ok, _red, _html} = live(conn, ~p"/games/#{id}?color=red")
+
+    {:ok, view, _html} = live(other, ~p"/games/#{id}")
+    assert has_element?(view, "div", "taken")
+    refute has_element?(view, "a", "red")
+
+    assert {:error, {:live_redirect, _}} = live(other, ~p"/games/#{id}?color=red")
+
+    # the same browser gets its seat back
+    {:ok, _red_again, html} = live(conn, ~p"/games/#{id}?color=red")
+    assert html =~ "Your turn"
+  end
+
+  test "leaving a seat frees it", %{conn: conn} do
+    id = start_game()
+    {:ok, red, _html} = live(conn, ~p"/games/#{id}?color=red")
+    red |> element("button", "Leave seat") |> render_click()
+    assert_patch(red, ~p"/games/#{id}")
+    assert GameServer.seats(id) == %{}
+  end
+
   test "playing a card updates every player's page", %{conn: conn} do
     id = start_game(deck: List.duplicate(@queen, 162))
     {:ok, red, _html} = live(conn, ~p"/games/#{id}?color=red")

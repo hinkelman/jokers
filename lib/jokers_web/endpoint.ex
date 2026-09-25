@@ -8,7 +8,9 @@ defmodule JokersWeb.Endpoint do
     store: :cookie,
     key: "_jokers_key",
     signing_salt: "Vqygcl6b",
-    same_site: "Lax"
+    same_site: "Lax",
+    # keep the session (and with it the player's seats) for a year, not just until the browser closes
+    max_age: 365 * 24 * 60 * 60
   ]
 
   socket "/live", Phoenix.LiveView.Socket,
