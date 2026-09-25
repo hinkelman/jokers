@@ -10,6 +10,7 @@ defmodule JokersWeb.BoardComponents do
   use Phoenix.Component
 
   alias Jokers.Board
+  alias JokersWeb.MovePicker
 
   # distance between neighboring holes, in SVG units
   @spacing 20
@@ -35,10 +36,12 @@ defmodule JokersWeb.BoardComponents do
 
   @doc """
   The board. `highlight` is a list of marbles to ring, such as the ones a previewed move changes.
+  Clicking a marble in `clickable` sends a `"pick_marble"` event with the marble's color and index.
   """
   attr :board, Board, required: true
   attr :viewer, :atom, default: nil, doc: "the color whose side is drawn at the bottom"
   attr :highlight, :list, default: []
+  attr :clickable, :list, default: []
 
   def board(assigns) do
     geometry = geometry(assigns.board, assigns.viewer)
@@ -72,7 +75,23 @@ defmodule JokersWeb.BoardComponents do
         stroke={spot.ring || "#d6d3d1"}
         stroke-width={if spot.ring, do: 3, else: 1}
       />
-      <g :for={{marble, {x, y}} <- marble_points(@board, @geometry)}>
+      <g
+        :for={{marble, {x, y}} <- marble_points(@board, @geometry)}
+        phx-click={if marble in @clickable, do: "pick_marble"}
+        phx-value-color={elem(marble, 0)}
+        phx-value-index={elem(marble, 1)}
+        style={if marble in @clickable, do: "cursor: pointer"}
+      >
+        <circle
+          :if={marble in @clickable}
+          cx={x}
+          cy={y}
+          r={@geometry.hole * 1.5}
+          fill="#fed7aa"
+          stroke="#f97316"
+          stroke-width="1.5"
+          stroke-dasharray="3 2"
+        />
         <circle
           cx={x}
           cy={y}
@@ -260,30 +279,20 @@ defmodule JokersWeb.BoardComponents do
   @doc "Describes a move (a list of steps) in words."
   def describe_move(board, steps), do: Enum.map_join(steps, ", then ", &describe_step(board, &1))
 
-  defp describe_step(board, {direction, marble, n}) when direction in [:forward, :backward] do
+  defp describe_step(_board, {direction, marble, n}) when direction in [:forward, :backward] do
     word = if direction == :forward, do: "forward", else: "back"
-    "#{marble_name(board, marble)} #{word} #{n}"
+    "#{marble_name(marble)} #{word} #{n}"
   end
 
   defp describe_step(_board, {:come_out, color}), do: "bring a #{color} marble out"
 
   defp describe_step(board, {:joker, marble, target}) do
-    "#{marble_name(board, marble)} jumps onto the marble at #{location(board, target)}"
+    "#{marble_name(marble)} jumps onto #{marble_name(MovePicker.marble_at(board, target))}"
   end
 
   defp describe_step(_board, {:joker_teammate, color, teammate}) do
     "bring a #{color} marble out onto #{teammate}'s barn door"
   end
 
-  defp marble_name(board, {color, idx} = marble) do
-    "#{color} #{idx + 1} (#{location(board, Board.position(board, marble))})"
-  end
-
-  defp location(board, {:track, _} = position) do
-    {side, p} = Board.side_position(board, position)
-    "#{side} #{p}"
-  end
-
-  defp location(_board, {:house, slot}), do: "house #{slot}"
-  defp location(_board, :barn), do: "barn"
+  defp marble_name({color, idx}), do: "#{color} #{idx + 1}"
 end

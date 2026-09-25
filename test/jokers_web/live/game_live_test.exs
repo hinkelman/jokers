@@ -64,6 +64,18 @@ defmodule JokersWeb.GameLiveTest do
     assert GameServer.seats(id) == %{}
   end
 
+  test "clicking a marble on the board picks the move", %{conn: conn} do
+    id = start_game(deck: List.duplicate(@queen, 162))
+    {:ok, red, _html} = live(conn, ~p"/games/#{id}?color=red")
+
+    red |> element("button[phx-value-index=0]", "Q") |> render_click()
+    assert has_element?(red, ~s(g[phx-click="pick_marble"][phx-value-color="red"]))
+    refute has_element?(red, "button", "Play this move")
+
+    red |> element(~s(g[phx-value-color="red"][phx-value-index="2"])) |> render_click()
+    assert has_element?(red, "button", "Play this move")
+  end
+
   test "playing a card updates every player's page", %{conn: conn} do
     id = start_game(deck: List.duplicate(@queen, 162))
     {:ok, red, _html} = live(conn, ~p"/games/#{id}?color=red")

@@ -5,7 +5,8 @@ defmodule JokersWeb.GameLive.Show do
   The player's color is in the URL (`/games/:id?color=red`); without it the page asks which
   color to play. Opening the page with a color claims that seat for this browser's player id
   (see `JokersWeb.Router`), and a seat someone else holds can't be taken. On their turn a player picks a card, then one of its legal moves, which is
-  previewed on the board until they confirm it.
+  previewed on the board until they confirm it. Instead of picking from the list of moves, they
+  can click marbles on the board to narrow it down (see `JokersWeb.MovePicker`).
   """
 
   use JokersWeb, :live_view
@@ -13,6 +14,7 @@ defmodule JokersWeb.GameLive.Show do
   import JokersWeb.BoardComponents
 
   alias Jokers.{Board, GameServer}
+  alias JokersWeb.MovePicker
 
   @impl true
   def mount(%{"id" => id}, session, socket) do
@@ -68,13 +70,36 @@ defmodule JokersWeb.GameLive.Show do
       must_discard:
         moves != %{} and Enum.all?(moves, fn {_card, card_moves} -> card_moves == [] end),
       selected_card: nil,
-      selected_move: nil
+      selected_move: nil,
+      picked: []
     )
   end
 
   @impl true
   def handle_event("select_card", %{"index" => index}, socket) do
-    {:noreply, assign(socket, selected_card: String.to_integer(index), selected_move: nil)}
+    {:noreply,
+     assign(socket, selected_card: String.to_integer(index), selected_move: nil, picked: [])}
+  end
+
+  # a marble clicked on the board narrows down the moves; once only one is left, preview it
+  def handle_event("pick_marble", %{"color" => color, "index" => index}, socket) do
+    %{assigns: assigns} = socket
+    marble = {String.to_existing_atom(color), String.to_integer(index)}
+    card_moves = card_moves(assigns)
+
+    if marble in MovePicker.clickable(assigns.view.board, card_moves, assigns.picked) do
+      picked = assigns.picked ++ [marble]
+
+      selected_move =
+        case MovePicker.matching(assigns.view.board, card_moves, picked) do
+          [only] -> only
+          _several -> nil
+        end
+
+      {:noreply, assign(socket, picked: picked, selected_move: selected_move)}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_event("select_move", %{"index" => index}, socket) do
@@ -82,7 +107,7 @@ defmodule JokersWeb.GameLive.Show do
   end
 
   def handle_event("cancel", _params, socket) do
-    {:noreply, assign(socket, selected_move: nil)}
+    {:noreply, assign(socket, selected_move: nil, picked: [])}
   end
 
   def handle_event("play", _params, socket) do
@@ -170,20 +195,26 @@ defmodule JokersWeb.GameLive.Show do
 
   def render(assigns) do
     preview = selected_move(assigns)
+    board = assigns.view.board
+    card_moves = card_moves(assigns)
+    picking = assigns.view.turn == assigns.color and card_moves != [] and preview == nil
 
     assigns =
       assign(assigns,
         preview: preview,
-        shown_board: if(preview, do: elem(preview, 1), else: assigns.view.board),
+        shown_board: if(preview, do: elem(preview, 1), else: board),
         highlight:
-          if(preview, do: changed_marbles(assigns.view.board, elem(preview, 1)), else: []),
-        card_moves: card_moves(assigns)
+          if(preview, do: changed_marbles(board, elem(preview, 1)), else: assigns.picked),
+        clickable:
+          if(picking, do: MovePicker.clickable(board, card_moves, assigns.picked), else: []),
+        card_moves: card_moves,
+        shown_moves: MovePicker.matching(board, card_moves, assigns.picked)
       )
 
     ~H"""
     <div class="flex flex-col gap-8 lg:flex-row">
       <div class="lg:w-3/5">
-        <.board board={@shown_board} viewer={@color} highlight={@highlight} />
+        <.board board={@shown_board} viewer={@color} highlight={@highlight} clickable={@clickable} />
         <p :if={@preview} class="text-center text-sm font-semibold text-orange-600">
           Preview of your move: changed marbles are ringed in orange.
         </p>
@@ -247,8 +278,14 @@ defmodule JokersWeb.GameLive.Show do
 
         <div :if={@view.turn == @color and not @must_discard and @selected_card} class="space-y-2">
           <p :if={@card_moves == []}>That card can't be played right now.</p>
+          <p :if={@clickable != []} class="text-sm text-zinc-600">
+            Click a ringed marble on the board, or pick a move below.
+            <button :if={@picked != []} type="button" phx-click="cancel" class="underline">
+              Start over
+            </button>
+          </p>
           <ul class="max-h-80 space-y-1 overflow-y-auto">
-            <li :for={{{steps, _board}, index} <- Enum.with_index(@card_moves)}>
+            <li :for={index <- @shown_moves}>
               <button
                 type="button"
                 phx-click="select_move"
@@ -261,7 +298,7 @@ defmodule JokersWeb.GameLive.Show do
                   )
                 ]}
               >
-                <%= describe_move(@view.board, steps) %>
+                <%= describe_move(@view.board, @card_moves |> Enum.at(index) |> elem(0)) %>
               </button>
             </li>
           </ul>
