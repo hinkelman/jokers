@@ -30,6 +30,11 @@ defmodule Jokers.CardsTest do
     assert hd(discard[:discard_pile]) == {:hearts, 3}
     assert length(discard[:hand]) == 5
 
+    # only one copy of a duplicated card is discarded
+    discard_dup = Cards.discard({:clubs, 3}, [{:clubs, 3} | hand], [])
+    assert length(discard_dup[:hand]) == 6
+    assert Enum.count(discard_dup[:hand], &(&1 == {:clubs, 3})) == 1
+
     draw1 = Cards.draw([], discard[:hand], Cards.decks())
     assert draw1[:discard_pile] == []
     assert length(draw1[:hand]) == 6

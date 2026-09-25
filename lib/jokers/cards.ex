@@ -42,7 +42,7 @@ defmodule Jokers.Cards do
 
   @spec discard(tuple(), list(tuple), list(tuple)) :: %{hand: list(tuple), discard_pile: list(tuple)}
   def discard(card, hand, discard_pile) do
-    new_hand = Enum.filter(hand, fn c -> c != card end)
-    %{hand: new_hand, discard_pile: [card | discard_pile]}
+    # List.delete removes only the first match; with three decks a hand can hold duplicate cards
+    %{hand: List.delete(hand, card), discard_pile: [card | discard_pile]}
   end
 end
