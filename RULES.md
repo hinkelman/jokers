@@ -26,8 +26,9 @@
 - If you have any legal move, you **must** play one.
 - If you have no legal move, discard one card face up (and draw).
 - **Five discards in a row:** the 5th consecutive discard brings one of your marbles out of the barn,
-  if you still have marbles in the barn and your barn door is free. The count resets when you
-  use it, and also when you bring a marble out with a card.
+  if you still have marbles in the barn and your barn door is free. (If all your marbles are home,
+  it brings out a marble of the teammate you are helping.) The count goes back to zero after the
+  5th discard, and whenever you play a card instead of discarding.
 - Hands are secret, and there is no table talk.
 
 ## Cards
@@ -48,7 +49,7 @@
 - Move a marble from your barn onto your barn door.
 - You can't come out if one of your own marbles is already on your barn door.
   The only exception is the joker's teammate move (see Joker).
-- If an opponent's marble is on your barn door, it is hit (see Hitting).
+- If an opponent's or a teammate's marble is on your barn door, it is hit (see Hitting).
 
 ### 7
 
@@ -102,10 +103,9 @@ A marble is hit only when another marble **lands** on it. Passing it doesn't cou
 
 - **Opponent's marble:** goes back to its barn.
 - **Teammate's marble:** goes to that teammate's home door.
-  - If an opponent's marble is on that home door, it goes back to its barn.
-  - If the teammate already has a marble on that home door, that marble goes back to their barn.
-    (For now the code sends *any* marble on that home door back to its barn, including another
-    teammate's marble or the hitting player's own marble. Revisit after some trial games.)
+  - Any marble already on that home door goes back to its own barn. That includes an opponent's
+    marble, the teammate's own marble, another teammate's marble, or a marble belonging to the
+    player who made the hit.
   - A teammate's marble that is hit while sitting on its own home door goes back to its barn.
 - Marbles in the house are safe. Every track position can be hit, including a barn door.
 
