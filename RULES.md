@@ -20,11 +20,13 @@
 
 ## Turns
 
-1. Play one card from your hand and make its move.
-2. Draw one card. When the draw pile is empty, shuffle the discard pile to make a new draw pile.
+1. Play one card from your hand and make its move. The card goes face up on your own discard
+   pile, so everyone can see the last card each player played.
+2. Draw one card. When the draw pile is empty, combine every player's discard pile and shuffle
+   them to make a new draw pile.
 
 - If you have any legal move, you **must** play one.
-- If you have no legal move, discard one card face up (and draw).
+- If you have no legal move, discard one card face up onto your discard pile (and draw).
 - **Five discards in a row:** the 5th consecutive discard brings one of your marbles out of the barn,
   if you still have marbles in the barn and your barn door is free. (If all your marbles are home,
   it brings out a marble of the teammate you are helping.) The count goes back to zero after the

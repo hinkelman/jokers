@@ -32,6 +32,23 @@ defmodule JokersWeb.MovePickerTest do
     assert Enum.all?(both, &(&1 in first))
   end
 
+  test "moves are sorted by marble, then backward before forward", %{board: board} do
+    board =
+      board
+      |> Board.place({:red, 0}, Board.track(board, :red, 8))
+      |> Board.place({:red, 1}, Board.track(board, :black, 0))
+
+    sorted = board |> Board.legal_moves(:red, {:spades, 9}) |> MovePicker.sort()
+
+    firsts =
+      Enum.map(sorted, fn {[{direction, {:red, idx}, n} | _], _} -> {idx, direction, n} end)
+
+    assert List.first(firsts) == {0, :backward, 1}
+    assert List.last(firsts) == {1, :forward, 8}
+    # every red 1 move comes before every red 2 move, and backward before forward
+    assert firsts == Enum.sort_by(firsts, fn {idx, dir, n} -> {idx, dir == :forward, n} end)
+  end
+
   test "a joker picks its marble, then the marble it lands on", %{board: board} do
     board =
       board

@@ -31,6 +31,22 @@ defmodule JokersWeb.MovePicker do
   defp step_targets(board, {:joker_teammate, color, teammate}),
     do: [{:barn, color}, marble_at(board, Board.barn_door(board, teammate))]
 
+  @doc """
+  Sorts moves for the list shown to the player: by the number of the first marble moved, then
+  backward moves before forward moves, then by distance, and the same again for the second part
+  of a split. Moves that bring a marble out of the barn come first.
+  """
+  @spec sort(list({list(Board.step()), Board.t()})) :: list({list(Board.step()), Board.t()})
+  def sort(moves) do
+    Enum.sort_by(moves, fn {steps, _new_board} -> Enum.map(steps, &sort_key/1) end)
+  end
+
+  defp sort_key({:come_out, _color}), do: {-1, 0, 0}
+  defp sort_key({:joker_teammate, _color, teammate}), do: {-1, 1, teammate}
+  defp sort_key({:backward, {_color, idx}, n}), do: {idx, 0, n}
+  defp sort_key({:forward, {_color, idx}, n}), do: {idx, 1, n}
+  defp sort_key({:joker, {_color, idx}, target}), do: {idx, 2, target}
+
   @doc "The marble at a position, or nil."
   @spec marble_at(Board.t(), Board.position()) :: Board.marble() | nil
   def marble_at(board, position) do

@@ -28,8 +28,22 @@ defmodule Jokers.GameTest do
     {:ok, game} = Game.play(game, :red, @queen, [{:come_out, :red}])
     assert Board.position(game.board, {:red, 0}) == Board.barn_door(game.board, :red)
     assert length(game.hands[:red]) == 6
-    assert hd(game.discard_pile) == @queen
+    assert game.discard_piles[:red] == [@queen]
+    assert game.last_played == %{red: @queen, black: nil, yellow: nil, blue: nil}
     assert game.turn == :black
+  end
+
+  test "an empty draw pile is refilled from every player's discard pile" do
+    game = Game.new(4, deck: deck(List.duplicate(@queen, 6)))
+    game = %{game | draw_pile: [], discard_piles: %{game.discard_piles | black: [@five, @five]}}
+
+    {:ok, game} = Game.play(game, :red, @queen, [{:come_out, :red}])
+    # the queen and black's two fives were shuffled together, and red drew one of them
+    assert length(game.draw_pile) == 2
+    assert game.discard_piles == %{red: [], black: [], yellow: [], blue: []}
+    assert length(game.hands[:red]) == 6
+    # the last card played is still shown
+    assert game.last_played[:red] == @queen
   end
 
   test "the 5th discard in a row brings a marble out" do
@@ -79,6 +93,7 @@ defmodule Jokers.GameTest do
     view = Game.view(game, :red)
     assert view.hand == game.hands[:red]
     assert view.hand_sizes == %{red: 6, black: 6, yellow: 6, blue: 6}
+    assert view.last_played == %{red: nil, black: nil, yellow: nil, blue: nil}
     refute Map.has_key?(view, :hands)
   end
 end

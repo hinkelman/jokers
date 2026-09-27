@@ -61,7 +61,15 @@ defmodule JokersWeb.GameLive.Show do
   defp load(socket) do
     %{id: id, color: color} = socket.assigns
     view = GameServer.view(id, color)
-    moves = if color && view.turn == color, do: GameServer.legal_moves(id, color), else: %{}
+
+    moves =
+      if color && view.turn == color do
+        id
+        |> GameServer.legal_moves(color)
+        |> Map.new(fn {card, card_moves} -> {card, MovePicker.sort(card_moves)} end)
+      else
+        %{}
+      end
 
     assign(socket,
       view: view,
@@ -214,7 +222,13 @@ defmodule JokersWeb.GameLive.Show do
     ~H"""
     <div class="flex flex-col gap-8 lg:flex-row">
       <div class="lg:w-3/5">
-        <.board board={@shown_board} viewer={@color} highlight={@highlight} clickable={@clickable} />
+        <.board
+          board={@shown_board}
+          viewer={@color}
+          highlight={@highlight}
+          clickable={@clickable}
+          last_played={@view.last_played}
+        />
         <p :if={@preview} class="text-center text-sm font-semibold text-orange-600">
           Preview of your move: changed marbles are ringed in orange.
         </p>
@@ -308,22 +322,9 @@ defmodule JokersWeb.GameLive.Show do
           </div>
         </div>
 
-        <div class="space-y-1 text-sm text-zinc-600">
-          <p>
-            Discard pile:
-            <%= case @view.discard_pile do %>
-              <% [top | _] -> %>
-                <span class="font-semibold"><%= card_name(top) %></span>
-              <% [] -> %>
-                empty
-            <% end %>
-            · draw pile: <%= @view.draw_pile_size %> cards
-          </p>
-          <p>Dealer: <%= @view.dealer %></p>
-          <p :if={@view.discard_counts[@color] > 0}>
-            Your discards in a row: <%= @view.discard_counts[@color] %>
-          </p>
-        </div>
+        <p :if={@view.discard_counts[@color] > 0} class="text-sm text-zinc-600">
+          Your discards in a row: <%= @view.discard_counts[@color] %>
+        </p>
       </div>
     </div>
     """

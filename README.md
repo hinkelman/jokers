@@ -32,6 +32,8 @@ Play at **https://jokers-hinkelman.fly.dev/**.
 
    The move is previewed on the board, with the marbles it changes ringed in orange. Click
    **Play this move** to play it, or **Cancel** to choose again.
+
+   The last card each player played or discarded is shown next to their side of the board.
 5. **No playable cards?** The page tells you, and you pick a card to discard. Your 5th discard in
    a row brings a marble out.
 6. **Winning.** When a team gets all its marbles home, the game ends. Click **Deal the next game**

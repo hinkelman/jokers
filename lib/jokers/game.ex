@@ -19,7 +19,11 @@ defmodule Jokers.Game do
     :winners,
     hands: %{},
     draw_pile: [],
-    discard_pile: [],
+    # each player discards (and plays) onto their own pile
+    discard_piles: %{},
+    # the last card each player played or discarded, shown to everyone; unlike the discard
+    # piles, it is kept when the piles are shuffled into a new draw pile
+    last_played: %{},
     # consecutive discards for each player
     discard_counts: %{}
   ]
@@ -31,7 +35,8 @@ defmodule Jokers.Game do
           winners: list(Board.color()) | nil,
           hands: %{Board.color() => list(tuple)},
           draw_pile: list(tuple),
-          discard_pile: list(tuple),
+          discard_piles: %{Board.color() => list(tuple)},
+          last_played: %{Board.color() => tuple | nil},
           discard_counts: %{Board.color() => non_neg_integer()}
         }
 
@@ -63,6 +68,8 @@ defmodule Jokers.Game do
       turn: first,
       hands: hands,
       draw_pile: draw_pile,
+      discard_piles: Map.new(board.seats, &{&1, []}),
+      last_played: Map.new(board.seats, &{&1, nil}),
       discard_counts: Map.new(board.seats, &{&1, 0})
     }
   end
@@ -136,8 +143,7 @@ defmodule Jokers.Game do
       winners: game.winners,
       hand: game.hands[player],
       hand_sizes: Map.new(game.hands, fn {color, hand} -> {color, length(hand)} end),
-      draw_pile_size: length(game.draw_pile),
-      discard_pile: game.discard_pile,
+      last_played: game.last_played,
       discard_counts: game.discard_counts
     }
   end
@@ -150,20 +156,21 @@ defmodule Jokers.Game do
     if card in game.hands[player], do: :ok, else: {:error, :not_in_hand}
   end
 
-  # the played or discarded card goes on the discard pile, the player draws, and play
-  # passes to the left unless the player's team has won
+  # the played or discarded card goes on the player's discard pile, the player draws, and
+  # play passes to the left unless the player's team has won
   defp end_turn(game, player, card) do
-    %{hand: hand, discard_pile: discard_pile} =
-      Cards.discard(card, game.hands[player], game.discard_pile)
+    %{hand: hand, discard_pile: pile} =
+      Cards.discard(card, game.hands[player], game.discard_piles[player])
 
-    %{hand: hand, draw_pile: draw_pile, discard_pile: discard_pile} =
-      Cards.draw(game.draw_pile, hand, discard_pile)
+    piles = Map.put(game.discard_piles, player, pile)
+    {hand, draw_pile, piles} = draw(game.draw_pile, hand, piles)
 
     game = %{
       game
       | hands: Map.put(game.hands, player, hand),
         draw_pile: draw_pile,
-        discard_pile: discard_pile
+        discard_piles: piles,
+        last_played: Map.put(game.last_played, player, card)
     }
 
     if Board.team_won?(game.board, player) do
@@ -171,6 +178,19 @@ defmodule Jokers.Game do
     else
       %{game | turn: next_seat(game.board, player)}
     end
+  end
+
+  # when the draw pile runs out, every player's discard pile is shuffled into a new one
+  defp draw([], hand, piles) do
+    %{hand: hand, draw_pile: draw_pile} =
+      Cards.draw([], hand, piles |> Map.values() |> Enum.concat())
+
+    {hand, draw_pile, Map.new(piles, fn {color, _pile} -> {color, []} end)}
+  end
+
+  defp draw(draw_pile, hand, piles) do
+    %{hand: hand, draw_pile: draw_pile} = Cards.draw(draw_pile, hand, [])
+    {hand, draw_pile, piles}
   end
 
   defp next_seat(board, color) do
