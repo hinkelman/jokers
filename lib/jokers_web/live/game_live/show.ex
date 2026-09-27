@@ -307,7 +307,7 @@ defmodule JokersWeb.GameLive.Show do
                 class={[
                   "w-full rounded-md border px-3 py-2 text-left text-sm",
                   if(index == @selected_move,
-                    do: "border-orange-500 bg-orange-50",
+                    do: "border-zinc-900 bg-zinc-100",
                     else: "border-zinc-200 hover:bg-zinc-50"
                   )
                 ]}

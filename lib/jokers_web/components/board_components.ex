@@ -418,7 +418,7 @@ defmodule JokersWeb.BoardComponents do
         "flex h-20 w-14 flex-col items-center justify-center rounded-lg border-2 bg-white text-xl font-bold shadow-sm",
         if(red_card?(@card), do: "text-red-600", else: "text-zinc-900"),
         if(@selected,
-          do: "border-orange-500 -translate-y-2",
+          do: "border-zinc-900 -translate-y-2",
           else: "border-zinc-300 hover:border-zinc-500"
         )
       ]}
