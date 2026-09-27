@@ -30,12 +30,12 @@ defmodule JokersWeb.BoardComponents do
   @doc "CSS color for a marble color."
   def marble_color(color), do: Map.fetch!(@marble_colors, color)
 
-  @doc "CSS color for drawing a color's rings and text, visible on a light background."
+  @doc "CSS color for drawing a color's text, visible on a light background."
   def line_color(:white), do: "#a1a1aa"
   def line_color(color), do: marble_color(color)
 
   @doc """
-  The board. `highlight` is a list of marbles to ring, such as the ones a previewed move changes.
+  The board. `highlight` is a list of marbles to outline, such as the ones a previewed move changes.
   Clicking a marble in `clickable` sends a `"pick_marble"` event with the marble's color and index.
   `last_played` maps each color to the last card that player played, shown beside their side.
   """
@@ -95,8 +95,7 @@ defmodule JokersWeb.BoardComponents do
         cy={spot.y}
         r={@geometry.hole}
         fill="#ecd3ac"
-        stroke={spot.ring || "#a8703c"}
-        stroke-width={if spot.ring, do: 3, else: 1}
+        stroke="#a8703c"
       />
 
       <g :for={{color, {x, y}} <- @geometry.piles}>
@@ -114,9 +113,9 @@ defmodule JokersWeb.BoardComponents do
           :if={marble in @clickable}
           cx={x}
           cy={y}
-          r={@geometry.hole * 1.5}
-          fill="#fed7aa"
-          stroke="#f97316"
+          r={@geometry.hole * 1.55}
+          fill="none"
+          stroke={emphasis_color(elem(marble, 0))}
           stroke-width="1.5"
           stroke-dasharray="3 2"
         />
@@ -125,8 +124,8 @@ defmodule JokersWeb.BoardComponents do
           cy={y}
           r={@geometry.hole * 1.15}
           fill={marble_color(elem(marble, 0))}
-          stroke={if marble in @highlight, do: "#f97316", else: "#44403c"}
-          stroke-width={if marble in @highlight, do: 4, else: 1}
+          stroke={if marble in @highlight, do: emphasis_color(elem(marble, 0)), else: "#44403c"}
+          stroke-width={if marble in @highlight, do: 3.5, else: 1}
         />
         <text
           x={x}
@@ -143,6 +142,10 @@ defmodule JokersWeb.BoardComponents do
     </svg>
     """
   end
+
+  # marks for clickable and changed marbles: black, except white around black marbles
+  defp emphasis_color(:black), do: "#fafafa"
+  defp emphasis_color(_color), do: "#18181b"
 
   # holes in a barn or house are a darker shade of its color
   defp shape_hole_color(:black), do: "rgba(255, 255, 255, 0.25)"
@@ -212,19 +215,20 @@ defmodule JokersWeb.BoardComponents do
   # side's own coordinates: a distance along the side (in positions) and a distance in from
   # the track toward the center (in hole spacings).
 
-  # house slots 1 to 5: two holes in from the home door, two along the side toward the corner,
-  # then one more in, making a Z shape like the physical board
+  # house slots 1 to 5: two holes in from the home door, two along the side toward the barn,
+  # then one more in, making a Z shape like the physical board (mirrored, to leave room at
+  # the corner)
   @house_slots [
     {@home_door, 1},
     {@home_door, 2},
-    {@home_door - 1, 2},
-    {@home_door - 2, 2},
-    {@home_door - 2, 3}
+    {@home_door + 1, 2},
+    {@home_door + 2, 2},
+    {@home_door + 2, 3}
   ]
 
   # the barn is a diamond in from the barn door, with its 5 holes in a plus shape;
   # each hole is {along, in}, measured from the diamond's center in barn-hole spacings
-  @barn_center {@barn_door, 2.9}
+  @barn_center {@barn_door, 2.5}
   @barn_hole_spacing 0.9
   @barn_holes [{0, -1}, {-1, 0}, {0, 0}, {1, 0}, {0, 1}]
 
@@ -368,11 +372,10 @@ defmodule JokersWeb.BoardComponents do
 
   defp points(corners), do: Enum.map_join(corners, " ", fn {x, y} -> "#{x},#{y}" end)
 
-  # the track holes; the barn and home doors are ringed in the side's color
   defp track_spots(board, geometry) do
     for color <- board.seats, p <- 0..(@side_length - 1) do
       {x, y} = track_point(geometry, color, p)
-      %{x: x, y: y, ring: if(p in [@barn_door, @home_door], do: line_color(color))}
+      %{x: x, y: y}
     end
   end
 

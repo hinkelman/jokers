@@ -229,8 +229,8 @@ defmodule JokersWeb.GameLive.Show do
           clickable={@clickable}
           last_played={@view.last_played}
         />
-        <p :if={@preview} class="text-center text-sm font-semibold text-orange-600">
-          Preview of your move: changed marbles are ringed in orange.
+        <p :if={@preview} class="text-center text-sm font-semibold text-zinc-700">
+          Preview of your move: the marbles it moves have a thick border.
         </p>
       </div>
 
@@ -293,7 +293,7 @@ defmodule JokersWeb.GameLive.Show do
         <div :if={@view.turn == @color and not @must_discard and @selected_card} class="space-y-2">
           <p :if={@card_moves == []}>That card can't be played right now.</p>
           <p :if={@clickable != []} class="text-sm text-zinc-600">
-            Click a ringed marble on the board, or pick a move below.
+            Click a marble with a dashed ring, or pick a move below.
             <button :if={@picked != []} type="button" phx-click="cancel" class="underline">
               Start over
             </button>

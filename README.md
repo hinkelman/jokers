@@ -25,12 +25,12 @@ Play at **https://jokers-hinkelman.fly.dev/**.
    private window or another browser.
 4. **Take your turn.** Your side of the board is always at the bottom. Click a card in your hand,
    then choose a move:
-   - Click a marble with a dashed orange ring to narrow down the moves. For a split 7 or 9, click
+   - Click a marble with a dashed ring to narrow down the moves. For a split 7 or 9, click
      the marble to move first, then the second. For a joker, click your marble, then the marble
      it lands on. Click any marble in your barn to bring one out.
    - Or pick a move from the list under your hand.
 
-   The move is previewed on the board, with the marbles it changes ringed in orange. Click
+   The move is previewed on the board, with the marbles it moves given a thick border. Click
    **Play this move** to play it, or **Cancel** to choose again.
 
    The last card each player played or discarded is shown next to their side of the board.
