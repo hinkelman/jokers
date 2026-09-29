@@ -27,6 +27,13 @@ defmodule JokersWeb.GameLiveTest do
     assert render_submit(lobby, "join", %{"code" => "nope"}) =~ "No game with the code"
   end
 
+  test "a closed game sends its players back to the lobby", %{conn: conn} do
+    id = start_game(idle_timeout: 200)
+    {:ok, view, _html} = live(conn, ~p"/games/#{id}")
+
+    assert_redirect(view, ~p"/", 1000)
+  end
+
   test "picking a color", %{conn: conn} do
     id = start_game()
     {:ok, view, html} = live(conn, ~p"/games/#{id}")

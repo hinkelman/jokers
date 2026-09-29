@@ -46,4 +46,14 @@ defmodule Jokers.GameServerTest do
     {:ok, pid} = GameServer.start(id, 6)
     assert GameServer.start(id, 6) == {:error, {:already_started, pid}}
   end
+
+  test "a game nobody touches stops itself" do
+    id = make_ref()
+    {:ok, pid} = GameServer.start(id, 4, idle_timeout: 50)
+    :ok = GameServer.subscribe(id)
+    ref = Process.monitor(pid)
+
+    assert_receive {:game_closed, ^id}
+    assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
+  end
 end

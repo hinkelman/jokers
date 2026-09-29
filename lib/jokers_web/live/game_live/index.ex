@@ -36,8 +36,7 @@ defmodule JokersWeb.GameLive.Index do
 
   @impl true
   def handle_event("new", %{"players" => players}, socket) do
-    code = new_code()
-    {:ok, _pid} = GameServer.start(code, String.to_integer(players))
+    code = start_game(String.to_integer(players))
     {:noreply, push_navigate(socket, to: ~p"/games/#{code}")}
   end
 
@@ -48,6 +47,16 @@ defmodule JokersWeb.GameLive.Index do
       {:noreply, push_navigate(socket, to: ~p"/games/#{code}")}
     else
       {:noreply, put_flash(socket, :error, "No game with the code \"#{code}\".")}
+    end
+  end
+
+  # draws codes until one isn't already taken by a game in progress
+  defp start_game(players) do
+    code = new_code()
+
+    case GameServer.start(code, players) do
+      {:ok, _pid} -> code
+      {:error, {:already_started, _pid}} -> start_game(players)
     end
   end
 

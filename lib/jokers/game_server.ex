@@ -9,12 +9,19 @@ defmodule Jokers.GameServer do
 
   The server also keeps track of who is sitting in each seat: a color is claimed by a player
   id (one per browser), and nobody else can claim it until it is released.
+
+  A game nobody has touched for `@idle_timeout` (or the `:idle_timeout` option) stops itself,
+  so abandoned games don't pile up. Before stopping it broadcasts `{:game_closed, id}` so any
+  page still open on it can send its player back to the lobby.
   """
 
   # :temporary because a restarted game would be a brand new deal, not the game in progress
   use GenServer, restart: :temporary
 
   alias Jokers.Game
+
+  # long enough to survive a break between hands, short enough that abandoned games go away
+  @idle_timeout :timer.hours(12)
 
   ## Client API
 
@@ -58,16 +65,18 @@ defmodule Jokers.GameServer do
 
   @impl true
   def init({id, player_num, opts}) do
-    {:ok, %{id: id, game: Game.new(player_num, opts), seats: %{}}}
+    {idle_timeout, opts} = Keyword.pop(opts, :idle_timeout, @idle_timeout)
+    state = %{id: id, game: Game.new(player_num, opts), seats: %{}, idle_timeout: idle_timeout}
+    {:ok, state, idle_timeout}
   end
 
   @impl true
   def handle_call({:view, player}, _from, state) do
-    {:reply, Game.view(state.game, player), state}
+    reply(Game.view(state.game, player), state)
   end
 
   def handle_call({:legal_moves, player}, _from, state) do
-    {:reply, Game.legal_moves(state.game, player), state}
+    reply(Game.legal_moves(state.game, player), state)
   end
 
   def handle_call({:play, player, card, steps}, _from, state) do
@@ -82,20 +91,20 @@ defmodule Jokers.GameServer do
     update(state, {:ok, Game.next_game(state.game)})
   end
 
-  def handle_call(:seats, _from, state), do: {:reply, state.seats, state}
+  def handle_call(:seats, _from, state), do: reply(state.seats, state)
 
   def handle_call({:claim, color, player_id}, _from, state) do
     cond do
       color not in state.game.board.seats ->
-        {:reply, {:error, :no_such_color}, state}
+        reply({:error, :no_such_color}, state)
 
       Map.get(state.seats, color, player_id) != player_id ->
-        {:reply, {:error, :taken}, state}
+        reply({:error, :taken}, state)
 
       true ->
         state = %{state | seats: Map.put(state.seats, color, player_id)}
         broadcast(state)
-        {:reply, :ok, state}
+        reply(:ok, state)
     end
   end
 
@@ -103,19 +112,28 @@ defmodule Jokers.GameServer do
     if state.seats[color] == player_id do
       state = %{state | seats: Map.delete(state.seats, color)}
       broadcast(state)
-      {:reply, :ok, state}
+      reply(:ok, state)
     else
-      {:reply, :ok, state}
+      reply(:ok, state)
     end
   end
 
   defp update(state, {:ok, game}) do
     state = %{state | game: game}
     broadcast(state)
-    {:reply, :ok, state}
+    reply(:ok, state)
   end
 
-  defp update(state, {:error, _reason} = error), do: {:reply, error, state}
+  defp update(state, {:error, _reason} = error), do: reply(error, state)
+
+  @impl true
+  def handle_info(:timeout, state) do
+    Phoenix.PubSub.broadcast(Jokers.PubSub, topic(state.id), {:game_closed, state.id})
+    {:stop, :normal, state}
+  end
+
+  # every reply restarts the idle countdown
+  defp reply(result, state), do: {:reply, result, state, state.idle_timeout}
 
   defp broadcast(state) do
     Phoenix.PubSub.broadcast(Jokers.PubSub, topic(state.id), {:game_updated, state.id})

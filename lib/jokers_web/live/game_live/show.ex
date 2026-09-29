@@ -57,6 +57,14 @@ defmodule JokersWeb.GameLive.Show do
       else: {:noreply, socket}
   end
 
+  # the game stopped after sitting idle too long
+  def handle_info({:game_closed, id}, socket) do
+    {:noreply,
+     socket
+     |> put_flash(:error, "Game \"#{id}\" was closed after going unplayed for too long.")
+     |> push_navigate(to: ~p"/")}
+  end
+
   # fetches this player's view of the game and clears any card or move they had picked
   defp load(socket) do
     %{id: id, color: color} = socket.assigns
