@@ -42,7 +42,8 @@ Play at **https://jokers-hinkelman.fly.dev/**.
 Every player's screen updates as soon as anyone moves.
 
 Games are kept only in the server's memory. Restarting or redeploying the server ends every game
-in progress.
+in progress. A game nobody has played for 12 hours is closed, and anyone still on its page is sent
+back to the lobby.
 
 ## Running it locally
 
