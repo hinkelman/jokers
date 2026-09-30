@@ -218,14 +218,10 @@ defmodule Jokers.Board do
 
     # a teammate's marble hit on its own home door has nowhere to go but the barn
     if teammates?(board, color, hitter) and position != door do
-      # any marble already on the home door goes to its barn
-      board =
-        case occupant(board, door) do
-          nil -> board
-          other -> place(board, other, :barn)
-        end
-
-      place(board, marble, door)
+      # it lands on its home door like any move, so a marble already there is hit in turn: an
+      # opponent's or one of its own color goes to the barn, and another teammate's goes on to
+      # its own home door
+      land(board, marble, door)
     else
       place(board, marble, :barn)
     end

@@ -64,6 +64,27 @@ defmodule Jokers.BoardTest do
     assert Board.position(board, {:yellow, 1}) == :barn
   end
 
+  test "a marble on a teammate's home door is hit in turn", %{board: board} do
+    # black and blue are teammates: black is on blue's barn door, and blue is on black's home door
+    board =
+      place_all(board, [{{:black, 0}, at(board, :blue, 8)}, {{:blue, 0}, at(board, :black, 3)}])
+
+    {:ok, board} = Board.come_out(board, :blue)
+    assert Board.position(board, {:blue, 1}) == at(board, :blue, 8)
+    assert Board.position(board, {:black, 0}) == at(board, :black, 3)
+    # blue's marble was hit by its teammate, so it goes to blue's home door, not the barn
+    assert Board.position(board, {:blue, 0}) == at(board, :blue, 3)
+  end
+
+  test "an opponent's marble on a teammate's home door goes to the barn", %{board: board} do
+    board =
+      place_all(board, [{{:yellow, 0}, at(board, :red, 8)}, {{:black, 0}, at(board, :yellow, 3)}])
+
+    {:ok, board} = Board.come_out(board, :red)
+    assert Board.position(board, {:yellow, 0}) == at(board, :yellow, 3)
+    assert Board.position(board, {:black, 0}) == :barn
+  end
+
   test "entering the house needs the exact count", %{board: board} do
     door = Board.place(board, {:red, 0}, at(board, :red, 3))
     assert {:ok, b} = Board.move(door, {:red, 0}, 1, :forward)

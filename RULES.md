@@ -105,9 +105,11 @@ A marble is hit only when another marble **lands** on it. Passing it doesn't cou
 
 - **Opponent's marble:** goes back to its barn.
 - **Teammate's marble:** goes to that teammate's home door.
-  - Any marble already on that home door goes back to its own barn. That includes an opponent's
-    marble, the teammate's own marble, another teammate's marble, or a marble belonging to the
-    player who made the hit.
+  - A marble already on that home door is hit in turn:
+    - an opponent's marble, or another marble of the same color, goes back to its barn;
+    - a marble of a different color on the same team goes to its own home door, and the same
+      check happens there. For example, if a blue marble is on black's home door when black's
+      marble is sent there, the blue marble goes to blue's home door.
   - A teammate's marble that is hit while sitting on its own home door goes back to its barn.
 - Marbles in the house are safe. Every track position can be hit, including a barn door.
 
