@@ -38,7 +38,7 @@ defmodule JokersWeb.BoardComponents do
   The board. `highlight` is a list of marbles to outline, such as the ones a previewed move changes.
   Clicking a marble in `clickable` sends a `"pick_marble"` event with the marble's color and index.
   `last_played` maps each color to the last card that player played, shown beside their side,
-  and `names` maps each color to its player's name, written along their side.
+  and `names` maps each color to its player's name, written above that card.
   """
   attr :board, Board, required: true
   attr :viewer, :atom, default: nil, doc: "the color whose side is drawn at the bottom"
@@ -48,7 +48,7 @@ defmodule JokersWeb.BoardComponents do
   attr :names, :map, default: %{}
 
   def board(assigns) do
-    geometry = geometry(assigns.board, assigns.viewer)
+    geometry = geometry(assigns.board, assigns.viewer, assigns.names)
 
     assigns =
       assign(assigns,
@@ -101,14 +101,12 @@ defmodule JokersWeb.BoardComponents do
       />
 
       <text
-        :for={{color, {x, y}, angle} <- @geometry.labels}
-        :if={@names[color]}
+        :for={{color, {x, y}, anchor} <- @geometry.labels}
         x={x}
         y={y}
-        transform={"rotate(#{angle} #{x} #{y})"}
-        text-anchor="middle"
+        text-anchor={anchor}
         dominant-baseline="central"
-        font-size="15"
+        font-size={label_size()}
         font-weight="600"
         fill="#3f3f46"
       >
@@ -249,7 +247,11 @@ defmodule JokersWeb.BoardComponents do
   @barn_hole_spacing 0.9
   @barn_holes [{0, -1}, {-1, 0}, {0, 0}, {1, 0}, {0, 1}]
 
-  defp geometry(board, viewer) do
+  @label_size 15
+
+  defp label_size, do: @label_size
+
+  defp geometry(board, viewer, names) do
     n = length(board.seats)
     side = @side_length * @spacing
     radius = side / (2 * :math.sin(:math.pi() / n))
@@ -281,32 +283,36 @@ defmodule JokersWeb.BoardComponents do
         Enum.map_join(vertices, " ", fn {x, y} -> "#{x * outline_scale},#{y * outline_scale}" end)
     }
 
-    # each player's name runs along the outside of their side, kept upright
-    labels =
-      for color <- board.seats do
-        middle = track_point(geometry, color, @side_length / 2)
-        {ax, ay} = along(geometry, color)
-        angle = :math.atan2(ay, ax) * 180 / :math.pi()
-
-        angle =
-          cond do
-            angle > 90 -> angle - 180
-            angle <= -90 -> angle + 180
-            true -> angle
-          end
-
-        {color, offset(middle, inward(geometry, color), -(outline_margin + 0.7 * @spacing)),
-         angle}
-      end
-
-    # each player's last played card sits outside the middle of their side, past their name
+    # each player's last played card sits just outside the middle of their side; sides facing
+    # down the screen leave a gap for the name, which goes between the card and the board
     piles =
       for color <- board.seats do
         {nx, ny} = inward(geometry, color)
         # how far the card reaches toward the board, for a card that isn't rotated
         reach = abs(nx) * @card_width / 2 + abs(ny) * @card_height / 2
+        gap = 0.3 * @spacing + max(-ny, 0) * 1.1 * @spacing
         middle = track_point(geometry, color, @side_length / 2)
-        {color, offset(middle, {nx, ny}, -(outline_margin + 1.4 * @spacing + reach))}
+        {color, offset(middle, {nx, ny}, -(outline_margin + gap + reach))}
+      end
+
+    # each name sits above its player's card; on the left and right it starts at the card's
+    # inner edge and runs outward, so a long name doesn't cover the board
+    labels =
+      for {color, {x, y}} <- piles, name = names[color] do
+        {nx, _ny} = inward(geometry, color)
+        width = String.length(name) * 0.62 * @label_size
+        y = y - @card_height / 2 - 0.55 * @label_size
+
+        cond do
+          nx > 0.3 ->
+            {color, {x + @card_width / 2, y}, "end", {x + @card_width / 2 - width, y}}
+
+          nx < -0.3 ->
+            {color, {x - @card_width / 2, y}, "start", {x - @card_width / 2 + width, y}}
+
+          true ->
+            {color, {x, y}, "middle", {x + width / 2, y}}
+        end
       end
 
     # half the width of the drawing: enough for the board and the cards around it
@@ -315,11 +321,14 @@ defmodule JokersWeb.BoardComponents do
         Enum.flat_map(vertices, fn {x, y} -> [abs(x) * outline_scale, abs(y) * outline_scale] end) ++
           Enum.flat_map(piles, fn {_color, {x, y}} ->
             [abs(x) + @card_width / 2, abs(y) + @card_height / 2]
+          end) ++
+          Enum.flat_map(labels, fn {_color, {_x, y}, _anchor, {far_x, _y}} ->
+            [abs(far_x), abs(y) + @label_size / 2]
           end)
       ) + 0.3 * @spacing
 
     Map.merge(geometry, %{
-      labels: labels,
+      labels: Enum.map(labels, fn {color, point, anchor, _far} -> {color, point, anchor} end),
       piles: piles,
       view_box: "#{-size} #{-size} #{2 * size} #{2 * size}"
     })
