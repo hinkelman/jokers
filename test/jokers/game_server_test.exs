@@ -67,8 +67,12 @@ defmodule Jokers.GameServerTest do
     # coming back without a name keeps it, a new one replaces it, and a blank one clears it
     assert GameServer.claim(id, :red, "ann") == :ok
     assert GameServer.names(id) == %{red: "Ann"}
+    :ok = GameServer.subscribe(id)
     assert GameServer.claim(id, :red, "ann", "Annie") == :ok
     assert GameServer.names(id) == %{red: "Annie"}
+    # a new name alone doesn't make every page reload the game
+    assert_receive {:names_updated, ^id}
+    refute_received {:game_updated, ^id}
     assert GameServer.claim(id, :red, "ann", " ") == :ok
     assert GameServer.names(id) == %{}
 

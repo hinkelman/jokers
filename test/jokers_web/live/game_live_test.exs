@@ -123,4 +123,23 @@ defmodule JokersWeb.GameLiveTest do
     # the box is cleared for the next message
     assert has_element?(red, "#chat-1")
   end
+
+  test "a player can change their name without leaving their seat", %{conn: conn} do
+    id = start_game(deck: List.duplicate(@queen, 162))
+    {:ok, red, _html} = live(conn, ~p"/games/#{id}?color=red")
+    {:ok, black, _html} = live(conn, ~p"/games/#{id}?color=black")
+
+    # black has a card picked, which a name change mustn't clear
+    black |> element("button[phx-value-index=0]", "Q") |> render_click()
+
+    red |> element("button", "Add name") |> render_click()
+    red |> form("#rename", %{"name" => "Ann"}) |> render_submit()
+    refute has_element?(red, "#rename")
+    assert has_element?(red, "button", "Change name")
+    assert GameServer.seats(id)[:red]
+
+    assert has_element?(black, "svg text", "Ann")
+    assert render(black) =~ "Waiting for Ann"
+    assert has_element?(black, ~s(button[phx-value-index="0"][class*="-translate-y-2"]))
+  end
 end

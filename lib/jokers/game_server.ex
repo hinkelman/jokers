@@ -9,7 +9,8 @@ defmodule Jokers.GameServer do
 
   The server also keeps track of who is sitting in each seat: a color is claimed by a player
   id (one per browser), and nobody else can claim it until it is released. Seated players may
-  give a name to show on their side of the board, and can send chat messages, which are
+  give a name to show on their side of the board (a name change alone is broadcast as
+  `{:names_updated, id}`, so pages needn't reload the game), and can send chat messages, which are
   broadcast as `{:chat_message, id, message}` so pages can add them without reloading the game.
 
   A game nobody has touched for `@idle_timeout` (or the `:idle_timeout` option) stops itself,
@@ -130,10 +131,16 @@ defmodule Jokers.GameServer do
         reply({:error, :taken}, state)
 
       true ->
-        state = %{state | seats: Map.put(state.seats, color, player_id)}
-        state = if name, do: put_name(state, color, name), else: state
-        broadcast(state)
-        reply(:ok, state)
+        new_state = %{state | seats: Map.put(state.seats, color, player_id)}
+        new_state = if name, do: put_name(new_state, color, name), else: new_state
+
+        cond do
+          new_state.seats != state.seats -> broadcast(new_state)
+          new_state.names != state.names -> broadcast(new_state, :names_updated)
+          true -> :nothing_changed
+        end
+
+        reply(:ok, new_state)
     end
   end
 
@@ -201,7 +208,7 @@ defmodule Jokers.GameServer do
   # every reply restarts the idle countdown
   defp reply(result, state), do: {:reply, result, state, state.idle_timeout}
 
-  defp broadcast(state) do
-    Phoenix.PubSub.broadcast(Jokers.PubSub, topic(state.id), {:game_updated, state.id})
+  defp broadcast(state, event \\ :game_updated) do
+    Phoenix.PubSub.broadcast(Jokers.PubSub, topic(state.id), {event, state.id})
   end
 end

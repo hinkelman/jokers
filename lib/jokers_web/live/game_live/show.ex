@@ -30,7 +30,8 @@ defmodule JokersWeb.GameLive.Show do
          page_title: "Jokers · #{id}",
          messages: GameServer.messages(id),
          # messages this page has sent, so the chat box can be cleared after each one
-         sent: 0
+         sent: 0,
+         renaming: false
        )}
     else
       {:ok,
@@ -65,6 +66,10 @@ defmodule JokersWeb.GameLive.Show do
     if color && socket.assigns.seats[color] != player_id,
       do: {:noreply, push_patch(socket, to: ~p"/games/#{id}")},
       else: {:noreply, socket}
+  end
+
+  def handle_info({:names_updated, id}, socket) do
+    {:noreply, assign(socket, names: GameServer.names(id))}
   end
 
   def handle_info({:chat_message, _id, message}, socket) do
@@ -117,6 +122,26 @@ defmodule JokersWeb.GameLive.Show do
 
       _taken_or_no_color ->
         {:noreply, socket |> put_flash(:error, "That color is already taken.") |> load()}
+    end
+  end
+
+  def handle_event("start_rename", _params, socket) do
+    {:noreply, assign(socket, renaming: true)}
+  end
+
+  def handle_event("cancel_rename", _params, socket) do
+    {:noreply, assign(socket, renaming: false)}
+  end
+
+  def handle_event("rename", %{"name" => name}, socket) do
+    %{id: id, color: color, player_id: player_id} = socket.assigns
+
+    case GameServer.claim(id, color, player_id, name) do
+      :ok ->
+        {:noreply, assign(socket, renaming: false, names: GameServer.names(id))}
+
+      {:error, _reason} ->
+        {:noreply, socket |> put_flash(:error, "You no longer hold #{color}.") |> load()}
     end
   end
 
@@ -299,10 +324,22 @@ defmodule JokersWeb.GameLive.Show do
           <p class="text-sm text-zinc-500">
             Game <%= @id %> · you are
             <span class="font-semibold" style={"color: #{line_color(@color)}"}><%= @color %></span>
+            <%= if @names[@color] do %>
+              as <span class="font-semibold text-zinc-700"><%= @names[@color] %></span>
+            <% end %>
             <%= if Board.acting_color(@view.board, @color) not in [@color, nil] do %>
               (helping <%= Board.acting_color(@view.board, @color) %>)
             <% end %>
             ·
+            <button
+              :if={not @renaming}
+              type="button"
+              phx-click="start_rename"
+              class="underline hover:text-zinc-700"
+            >
+              <%= if @names[@color], do: "Change name", else: "Add name" %>
+            </button>
+            <span :if={not @renaming}>·</span>
             <button
               type="button"
               phx-click="leave"
@@ -312,6 +349,22 @@ defmodule JokersWeb.GameLive.Show do
               Leave seat
             </button>
           </p>
+          <form :if={@renaming} id="rename" phx-submit="rename" class="mt-2 flex gap-2">
+            <input
+              type="text"
+              name="name"
+              value={@names[@color]}
+              maxlength="20"
+              autocomplete="off"
+              aria-label="Your name"
+              phx-mounted={JS.focus()}
+              class="block w-full rounded-lg border-zinc-300 text-zinc-900 focus:border-zinc-400 focus:ring-0 sm:text-sm"
+            />
+            <.button>Save</.button>
+            <.button type="button" phx-click="cancel_rename" class="bg-zinc-500 hover:bg-zinc-400">
+              Cancel
+            </.button>
+          </form>
           <p class="text-xl font-semibold">
             <%= cond do %>
               <% @view.winners -> %>
