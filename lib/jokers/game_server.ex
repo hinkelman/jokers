@@ -8,7 +8,9 @@ defmodule Jokers.GameServer do
   see their own hand; subscribers call `view/2` to fetch what they are allowed to see.
 
   The server also keeps track of who is sitting in each seat: a color is claimed by a player
-  id (one per browser), and nobody else can claim it until it is released.
+  id (one per browser), and nobody else can claim it until it is released. Seated players may
+  give a name to show on their side of the board, and can send chat messages, which are
+  broadcast as `{:chat_message, id, message}` so pages can add them without reloading the game.
 
   A game nobody has touched for `@idle_timeout` (or the `:idle_timeout` option) stops itself,
   so abandoned games don't pile up. Before stopping it broadcasts `{:game_closed, id}` so any
@@ -19,6 +21,11 @@ defmodule Jokers.GameServer do
   use GenServer, restart: :temporary
 
   alias Jokers.Game
+
+  @max_name 20
+  @max_message 300
+  # only the most recent messages are kept, so a long chat can't grow forever
+  @max_messages 100
 
   # long enough to survive a break between hands, short enough that abandoned games go away
   @idle_timeout :timer.hours(12)
@@ -50,9 +57,26 @@ defmodule Jokers.GameServer do
   @spec seats(term()) :: %{atom() => String.t()}
   def seats(id), do: GenServer.call(via(id), :seats)
 
-  @doc "Claims a color for a player. Claiming a color you already hold is fine."
-  @spec claim(term(), atom(), String.t()) :: :ok | {:error, :taken | :no_such_color}
-  def claim(id, color, player_id), do: GenServer.call(via(id), {:claim, color, player_id})
+  @doc """
+  Claims a color for a player. Claiming a color you already hold is fine. A `name` replaces the
+  name shown for the seat; without one the seat keeps the name it has.
+  """
+  @spec claim(term(), atom(), String.t(), String.t() | nil) ::
+          :ok | {:error, :taken | :no_such_color}
+  def claim(id, color, player_id, name \\ nil),
+    do: GenServer.call(via(id), {:claim, color, player_id, name})
+
+  @doc "The name each seated player gave, by color."
+  @spec names(term()) :: %{atom() => String.t()}
+  def names(id), do: GenServer.call(via(id), :names)
+
+  @doc "Sends a chat message from the player holding `color`."
+  @spec say(term(), atom(), String.t(), String.t()) :: :ok | {:error, :not_seated | :empty}
+  def say(id, color, player_id, text), do: GenServer.call(via(id), {:say, color, player_id, text})
+
+  @doc "The chat messages so far, newest first."
+  @spec messages(term()) :: [%{color: atom(), name: String.t() | nil, text: String.t()}]
+  def messages(id), do: GenServer.call(via(id), :messages)
 
   @doc "Gives up a color the player holds, so someone else can claim it."
   @spec release(term(), atom(), String.t()) :: :ok
@@ -66,7 +90,8 @@ defmodule Jokers.GameServer do
   @impl true
   def init({id, player_num, opts}) do
     {idle_timeout, opts} = Keyword.pop(opts, :idle_timeout, @idle_timeout)
-    state = %{id: id, game: Game.new(player_num, opts), seats: %{}, idle_timeout: idle_timeout}
+    state = %{id: id, game: Game.new(player_num, opts), seats: %{}, names: %{}, messages: []}
+    state = Map.put(state, :idle_timeout, idle_timeout)
     {:ok, state, idle_timeout}
   end
 
@@ -93,7 +118,10 @@ defmodule Jokers.GameServer do
 
   def handle_call(:seats, _from, state), do: reply(state.seats, state)
 
-  def handle_call({:claim, color, player_id}, _from, state) do
+  def handle_call(:names, _from, state), do: reply(state.names, state)
+  def handle_call(:messages, _from, state), do: reply(state.messages, state)
+
+  def handle_call({:claim, color, player_id, name}, _from, state) do
     cond do
       color not in state.game.board.seats ->
         reply({:error, :no_such_color}, state)
@@ -103,6 +131,7 @@ defmodule Jokers.GameServer do
 
       true ->
         state = %{state | seats: Map.put(state.seats, color, player_id)}
+        state = if name, do: put_name(state, color, name), else: state
         broadcast(state)
         reply(:ok, state)
     end
@@ -110,11 +139,48 @@ defmodule Jokers.GameServer do
 
   def handle_call({:release, color, player_id}, _from, state) do
     if state.seats[color] == player_id do
-      state = %{state | seats: Map.delete(state.seats, color)}
+      state = %{
+        state
+        | seats: Map.delete(state.seats, color),
+          names: Map.delete(state.names, color)
+      }
+
       broadcast(state)
       reply(:ok, state)
     else
       reply(:ok, state)
+    end
+  end
+
+  def handle_call({:say, color, player_id, text}, _from, state) do
+    text = text |> String.trim() |> String.slice(0, @max_message)
+
+    cond do
+      state.seats[color] != player_id ->
+        reply({:error, :not_seated}, state)
+
+      text == "" ->
+        reply({:error, :empty}, state)
+
+      true ->
+        message = %{color: color, name: state.names[color], text: text}
+        messages = Enum.take([message | state.messages], @max_messages)
+
+        Phoenix.PubSub.broadcast(
+          Jokers.PubSub,
+          topic(state.id),
+          {:chat_message, state.id, message}
+        )
+
+        reply(:ok, %{state | messages: messages})
+    end
+  end
+
+  # a blank name clears the seat's name
+  defp put_name(state, color, name) do
+    case name |> String.trim() |> String.slice(0, @max_name) do
+      "" -> %{state | names: Map.delete(state.names, color)}
+      name -> %{state | names: Map.put(state.names, color, name)}
     end
   end
 

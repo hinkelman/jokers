@@ -56,4 +56,48 @@ defmodule Jokers.GameServerTest do
     assert_receive {:game_closed, ^id}
     assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
   end
+
+  test "seated players can give a name" do
+    id = make_ref()
+    {:ok, _pid} = GameServer.start(id, 4)
+
+    assert GameServer.claim(id, :red, "ann", "  Ann  ") == :ok
+    assert GameServer.names(id) == %{red: "Ann"}
+
+    # coming back without a name keeps it, a new one replaces it, and a blank one clears it
+    assert GameServer.claim(id, :red, "ann") == :ok
+    assert GameServer.names(id) == %{red: "Ann"}
+    assert GameServer.claim(id, :red, "ann", "Annie") == :ok
+    assert GameServer.names(id) == %{red: "Annie"}
+    assert GameServer.claim(id, :red, "ann", " ") == :ok
+    assert GameServer.names(id) == %{}
+
+    # someone else can't rename a seat they don't hold, and leaving it drops the name
+    assert GameServer.claim(id, :red, "ann", "Ann") == :ok
+    assert GameServer.claim(id, :red, "bob", "Bob") == {:error, :taken}
+    assert GameServer.release(id, :red, "ann") == :ok
+    assert GameServer.names(id) == %{}
+  end
+
+  test "seated players can chat" do
+    id = make_ref()
+    {:ok, _pid} = GameServer.start(id, 4)
+    :ok = GameServer.claim(id, :red, "ann", "Ann")
+    :ok = GameServer.claim(id, :black, "bob")
+    :ok = GameServer.subscribe(id)
+
+    assert GameServer.say(id, :red, "ann", " hi ") == :ok
+    assert_receive {:chat_message, ^id, %{color: :red, name: "Ann", text: "hi"}}
+    assert GameServer.say(id, :black, "bob", "hello") == :ok
+    assert_receive {:chat_message, ^id, %{text: "hello"}}
+
+    assert GameServer.messages(id) == [
+             %{color: :black, name: nil, text: "hello"},
+             %{color: :red, name: "Ann", text: "hi"}
+           ]
+
+    assert GameServer.say(id, :red, "bob", "not my seat") == {:error, :not_seated}
+    assert GameServer.say(id, :red, "ann", "   ") == {:error, :empty}
+    refute_receive {:chat_message, ^id, _message}
+  end
 end

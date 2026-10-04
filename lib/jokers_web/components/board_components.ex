@@ -37,13 +37,15 @@ defmodule JokersWeb.BoardComponents do
   @doc """
   The board. `highlight` is a list of marbles to outline, such as the ones a previewed move changes.
   Clicking a marble in `clickable` sends a `"pick_marble"` event with the marble's color and index.
-  `last_played` maps each color to the last card that player played, shown beside their side.
+  `last_played` maps each color to the last card that player played, shown beside their side,
+  and `names` maps each color to its player's name, written along their side.
   """
   attr :board, Board, required: true
   attr :viewer, :atom, default: nil, doc: "the color whose side is drawn at the bottom"
   attr :highlight, :list, default: []
   attr :clickable, :list, default: []
   attr :last_played, :map, default: %{}
+  attr :names, :map, default: %{}
 
   def board(assigns) do
     geometry = geometry(assigns.board, assigns.viewer)
@@ -97,6 +99,21 @@ defmodule JokersWeb.BoardComponents do
         fill="#ecd3ac"
         stroke="#a8703c"
       />
+
+      <text
+        :for={{color, {x, y}, angle} <- @geometry.labels}
+        :if={@names[color]}
+        x={x}
+        y={y}
+        transform={"rotate(#{angle} #{x} #{y})"}
+        text-anchor="middle"
+        dominant-baseline="central"
+        font-size="15"
+        font-weight="600"
+        fill="#3f3f46"
+      >
+        <%= @names[color] %>
+      </text>
 
       <g :for={{color, {x, y}} <- @geometry.piles}>
         <.svg_card card={@last_played[color]} x={x} y={y} />
@@ -264,14 +281,32 @@ defmodule JokersWeb.BoardComponents do
         Enum.map_join(vertices, " ", fn {x, y} -> "#{x * outline_scale},#{y * outline_scale}" end)
     }
 
-    # each player's last played card sits just outside the middle of their side
+    # each player's name runs along the outside of their side, kept upright
+    labels =
+      for color <- board.seats do
+        middle = track_point(geometry, color, @side_length / 2)
+        {ax, ay} = along(geometry, color)
+        angle = :math.atan2(ay, ax) * 180 / :math.pi()
+
+        angle =
+          cond do
+            angle > 90 -> angle - 180
+            angle <= -90 -> angle + 180
+            true -> angle
+          end
+
+        {color, offset(middle, inward(geometry, color), -(outline_margin + 0.7 * @spacing)),
+         angle}
+      end
+
+    # each player's last played card sits outside the middle of their side, past their name
     piles =
       for color <- board.seats do
         {nx, ny} = inward(geometry, color)
         # how far the card reaches toward the board, for a card that isn't rotated
         reach = abs(nx) * @card_width / 2 + abs(ny) * @card_height / 2
         middle = track_point(geometry, color, @side_length / 2)
-        {color, offset(middle, {nx, ny}, -(outline_margin + 0.3 * @spacing + reach))}
+        {color, offset(middle, {nx, ny}, -(outline_margin + 1.4 * @spacing + reach))}
       end
 
     # half the width of the drawing: enough for the board and the cards around it
@@ -283,7 +318,11 @@ defmodule JokersWeb.BoardComponents do
           end)
       ) + 0.3 * @spacing
 
-    Map.merge(geometry, %{piles: piles, view_box: "#{-size} #{-size} #{2 * size} #{2 * size}"})
+    Map.merge(geometry, %{
+      labels: labels,
+      piles: piles,
+      view_box: "#{-size} #{-size} #{2 * size} #{2 * size}"
+    })
   end
 
   # a point along a color's side; p may be fractional, and position 0 is on the corner

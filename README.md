@@ -19,7 +19,8 @@ Play at **https://jokers-hinkelman.fly.dev/**.
    with a 6-character code, like `9ad18c`.
 2. **Invite everyone.** Send the game page's link to the other players, or read out the code so
    they can enter it under **Join a game**.
-3. **Pick your color.** Each color can be taken by only one person. Your browser remembers your
+3. **Pick your color.** You can also type a name, which is shown on your side of the board for
+   everyone. Each color can be taken by only one person. Your browser remembers your
    seat, so you can reload the page or come back later and keep your color. Use **Leave seat**
    if you picked the wrong one. To play two colors from one device, open the second one in a
    private window or another browser.
@@ -39,7 +40,8 @@ Play at **https://jokers-hinkelman.fly.dev/**.
 6. **Winning.** When a team gets all its marbles home, the game ends. Click **Deal the next game**
    to play again; the deal passes to the left.
 
-Every player's screen updates as soon as anyone moves.
+Every player's screen updates as soon as anyone moves. Seated players can send messages to each
+other in the chat box beside the board. The chat keeps the last 100 messages.
 
 Games are kept only in the server's memory. Restarting or redeploying the server ends every game
 in progress. A game nobody has played for 12 hours is closed, and anyone still on its page is sent

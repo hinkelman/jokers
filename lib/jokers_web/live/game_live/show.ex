@@ -3,10 +3,11 @@ defmodule JokersWeb.GameLive.Show do
   A game in progress, seen by one player.
 
   The player's color is in the URL (`/games/:id?color=red`); without it the page asks which
-  color to play. Opening the page with a color claims that seat for this browser's player id
+  color to play, and for a name to show on their side of the board. Opening the page with a color claims that seat for this browser's player id
   (see `JokersWeb.Router`), and a seat someone else holds can't be taken. On their turn a player picks a card, then one of its legal moves, which is
   previewed on the board until they confirm it. Instead of picking from the list of moves, they
-  can click marbles on the board to narrow it down (see `JokersWeb.MovePicker`).
+  can click marbles on the board to narrow it down (see `JokersWeb.MovePicker`). Seated players
+  can also chat.
   """
 
   use JokersWeb, :live_view
@@ -21,7 +22,16 @@ defmodule JokersWeb.GameLive.Show do
     if GameServer.exists?(id) do
       # the game process tells every player's page when something changes
       if connected?(socket), do: GameServer.subscribe(id)
-      {:ok, assign(socket, id: id, player_id: session["player_id"], page_title: "Jokers · #{id}")}
+
+      {:ok,
+       assign(socket,
+         id: id,
+         player_id: session["player_id"],
+         page_title: "Jokers · #{id}",
+         messages: GameServer.messages(id),
+         # messages this page has sent, so the chat box can be cleared after each one
+         sent: 0
+       )}
     else
       {:ok,
        socket |> put_flash(:error, "No game with the code \"#{id}\".") |> redirect(to: ~p"/")}
@@ -57,6 +67,10 @@ defmodule JokersWeb.GameLive.Show do
       else: {:noreply, socket}
   end
 
+  def handle_info({:chat_message, _id, message}, socket) do
+    {:noreply, update(socket, :messages, &Enum.take([message | &1], 100))}
+  end
+
   # the game stopped after sitting idle too long
   def handle_info({:game_closed, id}, socket) do
     {:noreply,
@@ -82,6 +96,7 @@ defmodule JokersWeb.GameLive.Show do
     assign(socket,
       view: view,
       seats: GameServer.seats(id),
+      names: GameServer.names(id),
       moves: moves,
       must_discard:
         moves != %{} and Enum.all?(moves, fn {_card, card_moves} -> card_moves == [] end),
@@ -92,6 +107,28 @@ defmodule JokersWeb.GameLive.Show do
   end
 
   @impl true
+  def handle_event("sit", %{"color" => color, "name" => name}, socket) do
+    %{id: id, player_id: player_id, view: view} = socket.assigns
+    color = Enum.find(view.board.seats, &(Atom.to_string(&1) == color))
+
+    case color && GameServer.claim(id, color, player_id, name) do
+      :ok ->
+        {:noreply, push_patch(socket, to: ~p"/games/#{id}?color=#{color}")}
+
+      _taken_or_no_color ->
+        {:noreply, socket |> put_flash(:error, "That color is already taken.") |> load()}
+    end
+  end
+
+  def handle_event("chat", %{"text" => text}, socket) do
+    %{id: id, color: color, player_id: player_id} = socket.assigns
+
+    case GameServer.say(id, color, player_id, text) do
+      :ok -> {:noreply, update(socket, :sent, &(&1 + 1))}
+      {:error, _reason} -> {:noreply, socket}
+    end
+  end
+
   def handle_event("select_card", %{"index" => index}, socket) do
     {:noreply,
      assign(socket, selected_card: String.to_integer(index), selected_move: nil, picked: [])}
@@ -178,30 +215,44 @@ defmodule JokersWeb.GameLive.Show do
         Game <%= @id %>
         <:subtitle>Share this page's link with the other players. Which color are you?</:subtitle>
       </.header>
-      <div class="grid grid-cols-2 gap-3">
-        <%= for color <- @view.board.seats do %>
-          <% holder = @seats[color] %>
-          <.link
-            :if={holder in [nil, @player_id]}
-            patch={~p"/games/#{@id}?color=#{color}"}
-            class="flex items-center gap-3 rounded-lg border border-zinc-300 p-3 font-semibold hover:bg-zinc-50"
-          >
-            <.seat_marble color={color} />
-            <%= color %>
-            <span class="ml-auto text-xs font-normal text-zinc-500">
-              <%= if holder, do: "yours", else: "free" %>
-            </span>
-          </.link>
-          <div
-            :if={holder not in [nil, @player_id]}
-            class="flex items-center gap-3 rounded-lg border border-zinc-200 bg-zinc-100 p-3 font-semibold text-zinc-400"
-          >
-            <.seat_marble color={color} />
-            <%= color %>
-            <span class="ml-auto text-xs font-normal">taken</span>
-          </div>
-        <% end %>
-      </div>
+      <form id="sit" phx-submit="sit" class="space-y-4">
+        <label class="block text-sm font-semibold text-zinc-800">
+          Your name <span class="font-normal text-zinc-500">(optional)</span>
+          <input
+            type="text"
+            name="name"
+            value={own_name(@seats, @names, @player_id)}
+            maxlength="20"
+            autocomplete="off"
+            class="mt-1 block w-full rounded-lg border-zinc-300 text-zinc-900 focus:border-zinc-400 focus:ring-0 sm:text-sm"
+          />
+        </label>
+        <div class="grid grid-cols-2 gap-3">
+          <%= for color <- @view.board.seats do %>
+            <% holder = @seats[color] %>
+            <button
+              :if={holder in [nil, @player_id]}
+              name="color"
+              value={color}
+              class="flex items-center gap-3 rounded-lg border border-zinc-300 p-3 text-left font-semibold hover:bg-zinc-50"
+            >
+              <.seat_marble color={color} />
+              <%= color %>
+              <span class="ml-auto text-xs font-normal text-zinc-500">
+                <%= if holder, do: "yours", else: "free" %>
+              </span>
+            </button>
+            <div
+              :if={holder not in [nil, @player_id]}
+              class="flex items-center gap-3 rounded-lg border border-zinc-200 bg-zinc-100 p-3 font-semibold text-zinc-400"
+            >
+              <.seat_marble color={color} />
+              <%= color %>
+              <span class="ml-auto text-xs font-normal"><%= @names[color] || "taken" %></span>
+            </div>
+          <% end %>
+        </div>
+      </form>
       <p class="text-sm text-zinc-600">
         Teams: <%= team_names(@view.board, 0) %> against <%= team_names(@view.board, 1) %>.
       </p>
@@ -236,6 +287,7 @@ defmodule JokersWeb.GameLive.Show do
           highlight={@highlight}
           clickable={@clickable}
           last_played={@view.last_played}
+          names={@names}
         />
         <p :if={@preview} class="text-center text-sm font-semibold text-zinc-700">
           Preview of your move: the marbles it moves have a thick border.
@@ -263,11 +315,11 @@ defmodule JokersWeb.GameLive.Show do
           <p class="text-xl font-semibold">
             <%= cond do %>
               <% @view.winners -> %>
-                <%= Enum.join(@view.winners, " & ") %> win!
+                <%= Enum.map_join(@view.winners, " & ", &who(&1, @names)) %> win!
               <% @view.turn == @color -> %>
                 Your turn
               <% true -> %>
-                Waiting for <%= @view.turn %>
+                Waiting for <%= who(@view.turn, @names) %>
             <% end %>
           </p>
           <.button :if={@view.winners} phx-click="next_game" class="mt-2">Deal the next game</.button>
@@ -333,6 +385,38 @@ defmodule JokersWeb.GameLive.Show do
         <p :if={@view.discard_counts[@color] > 0} class="text-sm text-zinc-600">
           Your discards in a row: <%= @view.discard_counts[@color] %>
         </p>
+
+        <div>
+          <p class="mb-2 text-sm font-semibold">Chat</p>
+          <%!-- reversed so the newest message sits at the bottom and stays in view --%>
+          <div
+            id="messages"
+            class="flex h-48 flex-col-reverse overflow-y-auto rounded-md border border-zinc-200 p-2 text-sm"
+          >
+            <p :for={message <- @messages} class="break-words">
+              <span class="font-semibold" style={"color: #{line_color(message.color)}"}>
+                <%= message.name || message.color %>:
+              </span>
+              <%= message.text %>
+            </p>
+            <p :if={@messages == []} class="text-zinc-400">No messages yet.</p>
+          </div>
+          <%!-- a new id after each message replaces the form, which clears the box --%>
+          <form id={"chat-#{@sent}"} phx-submit="chat" class="mt-2 flex gap-2">
+            <input
+              id={"chat-text-#{@sent}"}
+              type="text"
+              name="text"
+              maxlength="300"
+              autocomplete="off"
+              placeholder="Say something"
+              aria-label="Chat message"
+              phx-mounted={@sent > 0 && JS.focus()}
+              class="block w-full rounded-lg border-zinc-300 text-zinc-900 focus:border-zinc-400 focus:ring-0 sm:text-sm"
+            />
+            <.button>Send</.button>
+          </form>
+        </div>
       </div>
     </div>
     """
@@ -347,6 +431,14 @@ defmodule JokersWeb.GameLive.Show do
       style={"background: #{marble_color(@color)}"}
     />
     """
+  end
+
+  # a player's name, or their color if they didn't give one
+  defp who(color, names), do: names[color] || color
+
+  # the name this browser gave for a seat it holds, to fill in the name box
+  defp own_name(seats, names, player_id) do
+    Enum.find_value(seats, fn {color, holder} -> holder == player_id && names[color] end)
   end
 
   defp team_names(board, team) do

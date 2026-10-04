@@ -39,7 +39,7 @@ defmodule JokersWeb.GameLiveTest do
     {:ok, view, html} = live(conn, ~p"/games/#{id}")
     assert html =~ "Which color are you?"
 
-    view |> element("a", "yellow") |> render_click()
+    view |> form("#sit", %{"name" => ""}) |> render_submit(%{"color" => "yellow"})
     assert_patch(view, ~p"/games/#{id}?color=yellow")
     assert render(view) =~ "Waiting for red"
   end
@@ -54,7 +54,7 @@ defmodule JokersWeb.GameLiveTest do
 
     {:ok, view, _html} = live(other, ~p"/games/#{id}")
     assert has_element?(view, "div", "taken")
-    refute has_element?(view, "a", "red")
+    refute has_element?(view, "button", "red")
 
     assert {:error, {:live_redirect, _}} = live(other, ~p"/games/#{id}?color=red")
 
@@ -96,5 +96,31 @@ defmodule JokersWeb.GameLiveTest do
 
     assert render(red) =~ "Waiting for black"
     assert render(black) =~ "Your turn"
+  end
+
+  test "a player's name is shown to everyone", %{conn: conn} do
+    conn = init_test_session(conn, %{player_id: "ann"})
+    other = init_test_session(build_conn(), %{player_id: "bob"})
+    id = start_game()
+
+    {:ok, black, _html} = live(other, ~p"/games/#{id}?color=black")
+    {:ok, picker, _html} = live(conn, ~p"/games/#{id}")
+    picker |> form("#sit", %{"name" => "Ann"}) |> render_submit(%{"color" => "red"})
+    assert_patch(picker, ~p"/games/#{id}?color=red")
+
+    assert has_element?(black, "svg text", "Ann")
+    assert render(black) =~ "Waiting for Ann"
+  end
+
+  test "players can chat", %{conn: conn} do
+    id = start_game()
+    {:ok, red, _html} = live(conn, ~p"/games/#{id}?color=red")
+    {:ok, black, _html} = live(conn, ~p"/games/#{id}?color=black")
+    assert has_element?(black, "#messages", "No messages yet.")
+
+    red |> form("#chat-0", %{"text" => "Good luck"}) |> render_submit()
+    assert has_element?(black, "#messages", "Good luck")
+    # the box is cleared for the next message
+    assert has_element?(red, "#chat-1")
   end
 end
