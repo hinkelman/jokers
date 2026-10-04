@@ -6,8 +6,8 @@ defmodule JokersWeb.GameLive.Show do
   color to play, and for a name to show on their side of the board. Opening the page with a color claims that seat for this browser's player id
   (see `JokersWeb.Router`), and a seat someone else holds can't be taken. On their turn a player picks a card, then one of its legal moves, which is
   previewed on the board until they confirm it. Instead of picking from the list of moves, they
-  can click marbles on the board to narrow it down (see `JokersWeb.MovePicker`). Seated players
-  can also chat.
+  can click marbles on the board to narrow it down (see `JokersWeb.MovePicker`). Until the next
+  player moves, they can take their move back. Seated players can also chat.
   """
 
   use JokersWeb, :live_view
@@ -66,6 +66,16 @@ defmodule JokersWeb.GameLive.Show do
     if color && socket.assigns.seats[color] != player_id,
       do: {:noreply, push_patch(socket, to: ~p"/games/#{id}")},
       else: {:noreply, socket}
+  end
+
+  def handle_info({:move_undone, _id, mover}, socket) do
+    socket = load(socket)
+
+    if mover == socket.assigns.color,
+      do: {:noreply, socket},
+      else:
+        {:noreply,
+         put_flash(socket, :info, "#{who(mover, socket.assigns.names)} took back their move.")}
   end
 
   def handle_info({:names_updated, id}, socket) do
@@ -203,6 +213,19 @@ defmodule JokersWeb.GameLive.Show do
     %{id: id, color: color, player_id: player_id} = socket.assigns
     :ok = GameServer.release(id, color, player_id)
     {:noreply, push_patch(socket, to: ~p"/games/#{id}")}
+  end
+
+  def handle_event("undo", _params, socket) do
+    %{id: id, color: color} = socket.assigns
+
+    case GameServer.undo(id, color) do
+      :ok ->
+        {:noreply, socket}
+
+      {:error, :too_late} ->
+        {:noreply,
+         socket |> put_flash(:error, "Too late: the next player has already moved.") |> load()}
+    end
   end
 
   def handle_event("next_game", _params, socket) do
@@ -376,6 +399,16 @@ defmodule JokersWeb.GameLive.Show do
             <% end %>
           </p>
           <.button :if={@view.winners} phx-click="next_game" class="mt-2">Deal the next game</.button>
+          <div :if={@view.can_undo} class="mt-3 flex items-center gap-3 text-sm text-zinc-600">
+            <span>
+              Changed your mind? You can take your move back until <%= if @view.turn,
+                do: "#{who(@view.turn, @names)} moves",
+                else: "the next game is dealt" %>.
+            </span>
+            <.button phx-click="undo" class="shrink-0 bg-zinc-500 hover:bg-zinc-400">
+              Undo my move
+            </.button>
+          </div>
         </div>
 
         <div>
@@ -388,7 +421,18 @@ defmodule JokersWeb.GameLive.Show do
               phx-click="select_card"
               phx-value-index={index}
             />
+            <div
+              :if={@view.hidden_draw}
+              id="hidden-draw"
+              aria-label="The card you drew, hidden for now"
+              class="flex h-20 w-14 items-center justify-center rounded-lg border-2 border-zinc-300 bg-zinc-200 text-xl font-bold text-zinc-400"
+            >
+              ?
+            </div>
           </div>
+          <p :if={@view.hidden_draw} class="mt-2 text-xs text-zinc-500">
+            The card you drew shows once you can no longer undo your move.
+          </p>
         </div>
 
         <div :if={@view.turn == @color and @must_discard} class="space-y-2">

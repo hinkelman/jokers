@@ -32,7 +32,9 @@ Play at **https://jokers-hinkelman.fly.dev/**.
    - Or pick a move from the list under your hand.
 
    The move is previewed on the board, with the marbles it moves given a thick border. Click
-   **Play this move** to play it, or **Cancel** to choose again.
+   **Play this move** to play it, or **Cancel** to choose again. Changed your mind? Click
+   **Undo my move** any time before the next player moves. Until then, the card you drew stays
+   face down, so you can't pick a different move knowing what you'll get.
 
    The last card each player played or discarded is shown next to their side of the board.
 5. **No playable cards?** The page tells you, and you pick a card to discard. Your 5th discard in

@@ -104,4 +104,43 @@ defmodule Jokers.GameServerTest do
     assert GameServer.say(id, :red, "ann", "   ") == {:error, :empty}
     refute_receive {:chat_message, ^id, _message}
   end
+
+  test "a player can take back their move until the next player moves" do
+    id = make_ref()
+    {:ok, _pid} = GameServer.start(id, 4, deck: List.duplicate(@queen, 162))
+    before = GameServer.view(id, :red)
+    refute before.can_undo
+
+    :ok = GameServer.play(id, :red, @queen, [{:come_out, :red}])
+    :ok = GameServer.subscribe(id)
+
+    # only red can undo, and red can't see the card they drew until then
+    after_move = GameServer.view(id, :red)
+    assert after_move.can_undo and after_move.hidden_draw
+    assert length(after_move.hand) == length(before.hand) - 1
+    refute GameServer.view(id, :black).can_undo
+    assert GameServer.undo(id, :black) == {:error, :too_late}
+
+    assert GameServer.undo(id, :red) == :ok
+    assert_receive {:move_undone, ^id, :red}
+    assert GameServer.view(id, :red) == before
+    assert GameServer.undo(id, :red) == {:error, :too_late}
+
+    # once black moves, red's move stands and red sees their new card
+    :ok = GameServer.play(id, :red, @queen, [{:come_out, :red}])
+    :ok = GameServer.play(id, :black, @queen, [{:come_out, :black}])
+    assert GameServer.undo(id, :red) == {:error, :too_late}
+    refute GameServer.view(id, :red).hidden_draw
+    assert length(GameServer.view(id, :red).hand) == length(before.hand)
+    assert GameServer.view(id, :black).can_undo
+  end
+
+  test "dealing the next game ends the chance to undo" do
+    id = make_ref()
+    {:ok, _pid} = GameServer.start(id, 4, deck: List.duplicate(@queen, 162))
+    :ok = GameServer.play(id, :red, @queen, [{:come_out, :red}])
+    :ok = GameServer.next_game(id)
+    assert GameServer.undo(id, :red) == {:error, :too_late}
+    refute GameServer.view(id, :red).hidden_draw
+  end
 end

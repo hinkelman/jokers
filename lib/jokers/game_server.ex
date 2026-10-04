@@ -13,6 +13,12 @@ defmodule Jokers.GameServer do
   `{:names_updated, id}`, so pages needn't reload the game), and can send chat messages, which are
   broadcast as `{:chat_message, id, message}` so pages can add them without reloading the game.
 
+  The player who moved last may take the move back until the next player moves (or, after a
+  winning move, until the next game is dealt). The server keeps the game as it was before that
+  move, and until the chance to undo has passed, the card the player drew is hidden from them,
+  so they can't pick a different move knowing what they'll draw. An undo is broadcast as
+  `{:move_undone, id, color}`.
+
   A game nobody has touched for `@idle_timeout` (or the `:idle_timeout` option) stops itself,
   so abandoned games don't pile up. Before stopping it broadcasts `{:game_closed, id}` so any
   page still open on it can send its player back to the lobby.
@@ -54,6 +60,10 @@ defmodule Jokers.GameServer do
   def discard(id, player, card), do: GenServer.call(via(id), {:discard, player, card})
   def next_game(id), do: GenServer.call(via(id), :next_game)
 
+  @doc "Takes back `player`'s last move, if the next player hasn't moved yet."
+  @spec undo(term(), atom()) :: :ok | {:error, :too_late}
+  def undo(id, player), do: GenServer.call(via(id), {:undo, player})
+
   @doc "Which player id holds each claimed color."
   @spec seats(term()) :: %{atom() => String.t()}
   def seats(id), do: GenServer.call(via(id), :seats)
@@ -92,13 +102,19 @@ defmodule Jokers.GameServer do
   def init({id, player_num, opts}) do
     {idle_timeout, opts} = Keyword.pop(opts, :idle_timeout, @idle_timeout)
     state = %{id: id, game: Game.new(player_num, opts), seats: %{}, names: %{}, messages: []}
-    state = Map.put(state, :idle_timeout, idle_timeout)
+    # undo is the player who moved last and the game from before their move, while they can
+    # still take it back
+    state = Map.merge(state, %{undo: nil, idle_timeout: idle_timeout})
     {:ok, state, idle_timeout}
   end
 
   @impl true
   def handle_call({:view, player}, _from, state) do
-    reply(Game.view(state.game, player), state)
+    view = Game.view(state.game, player)
+    can_undo = state.undo != nil and state.undo.player == player
+    # a drawn card goes on the front of the hand
+    view = if can_undo, do: %{view | hand: tl(view.hand)}, else: view
+    reply(Map.merge(view, %{can_undo: can_undo, hidden_draw: can_undo}), state)
   end
 
   def handle_call({:legal_moves, player}, _from, state) do
@@ -106,15 +122,27 @@ defmodule Jokers.GameServer do
   end
 
   def handle_call({:play, player, card, steps}, _from, state) do
-    update(state, Game.play(state.game, player, card, steps))
+    update(state, Game.play(state.game, player, card, steps), player)
   end
 
   def handle_call({:discard, player, card}, _from, state) do
-    update(state, Game.discard(state.game, player, card))
+    update(state, Game.discard(state.game, player, card), player)
   end
 
   def handle_call(:next_game, _from, state) do
-    update(state, {:ok, Game.next_game(state.game)})
+    update(state, {:ok, Game.next_game(state.game)}, nil)
+  end
+
+  def handle_call({:undo, player}, _from, state) do
+    case state.undo do
+      %{player: ^player, game: game} ->
+        state = %{state | game: game, undo: nil}
+        Phoenix.PubSub.broadcast(Jokers.PubSub, topic(state.id), {:move_undone, state.id, player})
+        reply(:ok, state)
+
+      _other_player_or_none ->
+        reply({:error, :too_late}, state)
+    end
   end
 
   def handle_call(:seats, _from, state), do: reply(state.seats, state)
@@ -191,13 +219,15 @@ defmodule Jokers.GameServer do
     end
   end
 
-  defp update(state, {:ok, game}) do
-    state = %{state | game: game}
+  # `mover` is the player who can take this change back, if anyone
+  defp update(state, {:ok, game}, mover) do
+    undo = if mover, do: %{player: mover, game: state.game}
+    state = %{state | game: game, undo: undo}
     broadcast(state)
     reply(:ok, state)
   end
 
-  defp update(state, {:error, _reason} = error), do: reply(error, state)
+  defp update(state, {:error, _reason} = error, _mover), do: reply(error, state)
 
   @impl true
   def handle_info(:timeout, state) do

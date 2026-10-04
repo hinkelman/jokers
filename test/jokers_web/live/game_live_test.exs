@@ -142,4 +142,23 @@ defmodule JokersWeb.GameLiveTest do
     assert render(black) =~ "Waiting for Ann"
     assert has_element?(black, ~s(button[phx-value-index="0"][class*="-translate-y-2"]))
   end
+
+  test "undoing a move", %{conn: conn} do
+    conn = init_test_session(conn, %{player_id: "ann"})
+    other = init_test_session(build_conn(), %{player_id: "bob"})
+    id = start_game(deck: List.duplicate(@queen, 162))
+    {:ok, red, _html} = live(conn, ~p"/games/#{id}?color=red")
+    {:ok, black, _html} = live(other, ~p"/games/#{id}?color=black")
+
+    red |> element("button[phx-value-index=0]", "Q") |> render_click()
+    red |> element("li button", "bring a red marble out") |> render_click()
+    red |> element("button", "Play this move") |> render_click()
+    assert has_element?(red, "#hidden-draw")
+    refute has_element?(black, "button", "Undo my move")
+
+    red |> element("button", "Undo my move") |> render_click()
+    assert render(red) =~ "Your turn"
+    refute has_element?(red, "#hidden-draw")
+    assert render(black) =~ "red took back their move."
+  end
 end
