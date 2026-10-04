@@ -19,8 +19,9 @@ Play at **https://jokers-hinkelman.fly.dev/**.
    with a 6-character code, like `9ad18c`.
 2. **Invite everyone.** Send the game page's link to the other players, or read out the code so
    they can enter it under **Join a game**.
-3. **Pick your color.** You can also type a name, which is shown on your side of the board for
-   everyone. Each color can be taken by only one person. Your browser remembers your
+3. **Pick your color.** You can also type a name, which everyone sees above your discard pile
+   and in the turn line. To change it later, click **Change name** (or **Add name**) at the top of
+   the game page; you keep your seat. Each color can be taken by only one person. Your browser remembers your
    seat, so you can reload the page or come back later and keep your color. Use **Leave seat**
    if you picked the wrong one. To play two colors from one device, open the second one in a
    private window or another browser.
@@ -33,8 +34,10 @@ Play at **https://jokers-hinkelman.fly.dev/**.
 
    The move is previewed on the board, with the marbles it moves given a thick border. Click
    **Play this move** to play it, or **Cancel** to choose again. Changed your mind? Click
-   **Undo my move** any time before the next player moves. Until then, the card you drew stays
-   face down, so you can't pick a different move knowing what you'll get.
+   **Undo my move** any time before the next player moves; this works for discards too, and a
+   winning move can be undone until the next game is dealt. Until then, the card you drew stays
+   face down, so you can't pick a different move knowing what you'll get. The other players are
+   told when a move is taken back.
 
    The last card each player played or discarded is shown next to their side of the board.
 5. **No playable cards?** The page tells you, and you pick a card to discard. Your 5th discard in
