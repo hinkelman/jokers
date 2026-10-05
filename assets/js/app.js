@@ -22,31 +22,66 @@ import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import topbar from "../vendor/topbar"
 
-// Browsers only let a page play sound after the player has interacted with it, so the audio
-// context is created (or woken up) on the first click or key press.
-let audio = null
+// The turn tone: one soft 660 Hz beep, fading out over 0.6 seconds, made here as a WAV file.
+// It plays through an <audio> element rather than Web Audio because Safari silences Web Audio
+// in background tabs, which is exactly where a player who's busy elsewhere will be.
+let toneUrl = (() => {
+  let rate = 44100
+  let samples = rate * 0.6
+  let view = new DataView(new ArrayBuffer(44 + samples * 2))
+  let text = (offset, string) =>
+    [...string].forEach((char, i) => view.setUint8(offset + i, char.charCodeAt(0)))
+  text(0, "RIFF")
+  view.setUint32(4, 36 + samples * 2, true)
+  text(8, "WAVEfmt ")
+  view.setUint32(16, 16, true) // format chunk size
+  view.setUint16(20, 1, true) // PCM
+  view.setUint16(22, 1, true) // mono
+  view.setUint32(24, rate, true)
+  view.setUint32(28, rate * 2, true) // bytes per second
+  view.setUint16(32, 2, true) // bytes per sample
+  view.setUint16(34, 16, true) // bits per sample
+  text(36, "data")
+  view.setUint32(40, samples * 2, true)
+  for (let i = 0; i < samples; i++) {
+    let t = i / rate
+    let envelope = Math.min(t / 0.02, 1) * Math.exp(-t * 8)
+    view.setInt16(44 + i * 2, Math.sin(2 * Math.PI * 660 * t) * envelope * 0.3 * 32767, true)
+  }
+  return URL.createObjectURL(new Blob([view.buffer], {type: "audio/wav"}))
+})()
+
+let tone = new Audio(toneUrl)
+
+// Browsers only let a page play sound once the player has interacted with it, and Safari only
+// lets an audio element play by itself once it has been played from a click. So the first
+// click or key press plays the tone silently, which lets it play later when the turn comes.
+let unlocked = false
 let unlockAudio = () => {
-  audio = audio || new AudioContext()
-  if (audio.state === "suspended") audio.resume()
+  if (unlocked) return
+  unlocked = true
+  tone.volume = 0
+  tone.play()
+    .then(() => {
+      // unless the click was "Test sound", which wants to hear it
+      if (tone.volume === 0) {
+        tone.pause()
+        tone.currentTime = 0
+      }
+    })
+    .catch(() => { unlocked = false })
 }
 document.addEventListener("pointerdown", unlockAudio)
 document.addEventListener("keydown", unlockAudio)
 
-// one soft, short tone
 let playTone = () => {
-  if (!audio || audio.state !== "running") return
-  let now = audio.currentTime
-  let oscillator = audio.createOscillator()
-  let gain = audio.createGain()
-  oscillator.type = "sine"
-  oscillator.frequency.value = 660
-  gain.gain.setValueAtTime(0, now)
-  gain.gain.linearRampToValueAtTime(0.15, now + 0.02)
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.6)
-  oscillator.connect(gain).connect(audio.destination)
-  oscillator.start(now)
-  oscillator.stop(now + 0.6)
+  tone.volume = 1
+  tone.currentTime = 0
+  tone.play().catch(() => {})
 }
+
+// the "Test sound" link
+window.addEventListener("jokers:test-tone", playTone)
 
 let Hooks = {}
 

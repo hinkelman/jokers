@@ -375,6 +375,14 @@ defmodule JokersWeb.GameLive.Show do
             <span :if={not @renaming}>·</span>
             <button
               type="button"
+              phx-click={JS.dispatch("jokers:test-tone")}
+              class="underline hover:text-zinc-700"
+            >
+              Test sound
+            </button>
+            ·
+            <button
+              type="button"
               phx-click="leave"
               data-confirm="Give up your seat so someone else can take it?"
               class="underline hover:text-zinc-700"
@@ -414,13 +422,27 @@ defmodule JokersWeb.GameLive.Show do
                 Waiting for <%= who(@view.turn, @names) %>
             <% end %>
           </p>
-          <p :if={@view.last_move} id="last-move" class="mt-2 text-sm text-zinc-600">
-            <span class="font-semibold text-zinc-700">Your last move:</span>
-            <%= describe_last_move(@view.last_move) %>
-            <%= if @ghosts != [] do %>
-              On the board, a dashed circle shows where each marble started.
-            <% end %>
-          </p>
+          <%!-- the description is shown on hover, or on a click for touch screens, since the
+               dashed circles on the board usually say enough --%>
+          <div :if={@view.last_move} id="last-move" class="group relative mt-1 inline-block">
+            <button
+              type="button"
+              phx-click={JS.toggle_class("hidden", to: "#last-move-text")}
+              class="flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-700"
+            >
+              <.icon name="hero-information-circle-mini" class="h-4 w-4" /> Your last move
+            </button>
+            <p
+              id="last-move-text"
+              phx-click-away={JS.add_class("hidden", to: "#last-move-text")}
+              class="absolute left-0 top-full z-10 mt-1 hidden w-80 rounded-lg border border-zinc-200 bg-white p-3 text-sm text-zinc-700 shadow-lg group-hover:block"
+            >
+              <%= describe_last_move(@view.last_move) %>
+              <%= if @ghosts != [] do %>
+                On the board, a dashed circle shows where each marble started.
+              <% end %>
+            </p>
+          </div>
           <.button :if={@view.winners} phx-click="next_game" class="mt-2">Deal the next game</.button>
           <div :if={@view.can_undo} class="mt-3 flex items-center gap-3 text-sm text-zinc-600">
             <span>

@@ -138,7 +138,7 @@ defmodule JokersWeb.BoardComponents do
           dominant-baseline="central"
           font-size="9"
           font-weight="bold"
-          fill={line_color(color)}
+          fill={if color == :yellow, do: "#18181b", else: line_color(color)}
         >
           <%= idx + 1 %>
         </text>
