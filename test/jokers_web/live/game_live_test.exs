@@ -96,6 +96,33 @@ defmodule JokersWeb.GameLiveTest do
 
     assert render(red) =~ "Waiting for black"
     assert render(black) =~ "Your turn"
+    assert page_title(black) =~ "Your turn!"
+    # only red is told about red's move
+    assert has_element?(red, "#last-move", "red 1 came out onto red's barn door.")
+    refute has_element?(black, "#last-move")
+  end
+
+  test "a player sees what their last move did", %{conn: conn} do
+    id = start_game(deck: List.duplicate(@queen, 162))
+
+    for color <- [:red, :black, :yellow, :blue],
+        do: :ok = GameServer.play(id, color, @queen, [{:come_out, color}])
+
+    {:ok, red, _html} = live(conn, ~p"/games/#{id}?color=red")
+    assert has_element?(red, "#last-move", "red 1 came out onto red's barn door.")
+
+    red |> element("button[phx-value-index=0]", "Q") |> render_click()
+    red |> element("li button", "red 1 forward 10") |> render_click()
+    red |> element("button", "Play this move") |> render_click()
+
+    assert has_element?(
+             red,
+             "#last-move",
+             "red 1 moved 10 forward, from red's barn door to 3 spots before black's home door."
+           )
+
+    # a dashed circle where the marble started
+    assert has_element?(red, "g.ghost", "1")
   end
 
   test "a player's name is shown to everyone", %{conn: conn} do

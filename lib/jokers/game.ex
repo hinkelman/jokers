@@ -25,7 +25,10 @@ defmodule Jokers.Game do
     # piles, it is kept when the piles are shuffled into a new draw pile
     last_played: %{},
     # consecutive discards for each player
-    discard_counts: %{}
+    discard_counts: %{},
+    # each player's most recent play or discard, so they can see exactly what it did: the
+    # steps (nil for a discard), and the board from before and after it
+    last_moves: %{}
   ]
 
   @type t :: %__MODULE__{
@@ -37,8 +40,11 @@ defmodule Jokers.Game do
           draw_pile: list(tuple),
           discard_piles: %{Board.color() => list(tuple)},
           last_played: %{Board.color() => tuple | nil},
-          discard_counts: %{Board.color() => non_neg_integer()}
+          discard_counts: %{Board.color() => non_neg_integer()},
+          last_moves: %{Board.color() => last_move()}
         }
+
+  @type last_move :: %{steps: list(Board.step()) | nil, before: Board.t(), after: Board.t()}
 
   @type error :: :game_over | :not_your_turn | :not_in_hand | :must_play | :illegal_move
 
@@ -99,7 +105,14 @@ defmodule Jokers.Game do
     with :ok <- check_turn(game, player),
          :ok <- check_card(game, player, card),
          {:ok, board} <- Board.play(game.board, player, card, steps) do
-      game = %{game | board: board, discard_counts: Map.put(game.discard_counts, player, 0)}
+      game = %{
+        game
+        | board: board,
+          discard_counts: Map.put(game.discard_counts, player, 0),
+          last_moves:
+            Map.put(game.last_moves, player, %{steps: steps, before: game.board, after: board})
+      }
+
       {:ok, end_turn(game, player, card)}
     end
   end
@@ -110,6 +123,7 @@ defmodule Jokers.Game do
     with :ok <- check_turn(game, player),
          :ok <- check_card(game, player, card),
          :ok <- if(must_discard?(game, player), do: :ok, else: {:error, :must_play}) do
+      before = game.board
       count = game.discard_counts[player] + 1
 
       game =
@@ -125,6 +139,9 @@ defmodule Jokers.Game do
         else
           %{game | discard_counts: Map.put(game.discard_counts, player, count)}
         end
+
+      last_move = %{steps: nil, before: before, after: game.board}
+      game = %{game | last_moves: Map.put(game.last_moves, player, last_move)}
 
       {:ok, end_turn(game, player, card)}
     end
@@ -144,7 +161,9 @@ defmodule Jokers.Game do
       hand: game.hands[player],
       hand_sizes: Map.new(game.hands, fn {color, hand} -> {color, length(hand)} end),
       last_played: game.last_played,
-      discard_counts: game.discard_counts
+      discard_counts: game.discard_counts,
+      # only the player's own last move
+      last_move: game.last_moves[player]
     }
   end
 

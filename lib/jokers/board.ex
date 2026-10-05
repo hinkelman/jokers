@@ -250,6 +250,20 @@ defmodule Jokers.Board do
     end
   end
 
+  @doc """
+  Makes one step of a move without checking that the whole move is legal (`play/4` does that),
+  so a played move can be replayed one step at a time.
+  """
+  @spec apply_step(t(), step()) :: {:ok, t()} | :error
+  def apply_step(board, {direction, marble, n}) when direction in [:forward, :backward],
+    do: move(board, marble, n, direction)
+
+  def apply_step(board, {:come_out, color}), do: come_out(board, color)
+  def apply_step(board, {:joker, marble, target}), do: joker(board, marble, target)
+
+  def apply_step(board, {:joker_teammate, color, teammate}),
+    do: joker_teammate(board, color, teammate)
+
   defp moves(board, _player, color, n) when n in [2, 3, 4, 5, 6, 10] do
     single_moves(board, color, n, :forward)
   end

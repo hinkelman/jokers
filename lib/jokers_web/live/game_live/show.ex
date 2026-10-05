@@ -27,7 +27,6 @@ defmodule JokersWeb.GameLive.Show do
        assign(socket,
          id: id,
          player_id: session["player_id"],
-         page_title: "Jokers · #{id}",
          messages: GameServer.messages(id),
          # messages this page has sent, so the chat box can be cleared after each one
          sent: 0,
@@ -109,6 +108,9 @@ defmodule JokersWeb.GameLive.Show do
       end
 
     assign(socket,
+      # the tab's title says when it's your turn, for players looking at another tab
+      page_title:
+        if(color && view.turn == color, do: "Your turn! · Jokers", else: "Jokers · #{id}"),
       view: view,
       seats: GameServer.seats(id),
       names: GameServer.names(id),
@@ -247,14 +249,6 @@ defmodule JokersWeb.GameLive.Show do
   defp selected_move(%{selected_move: nil}), do: nil
   defp selected_move(assigns), do: Enum.at(card_moves(assigns), assigns.selected_move)
 
-  # marbles whose position differs between two boards
-  defp changed_marbles(before, after_move) do
-    for {color, positions} <- before.marbles,
-        {{old, new}, idx} <- Enum.with_index(Enum.zip(positions, after_move.marbles[color])),
-        old != new,
-        do: {color, idx}
-  end
-
   @impl true
   def render(%{color: nil} = assigns) do
     ~H"""
@@ -310,6 +304,12 @@ defmodule JokersWeb.GameLive.Show do
 
   def render(assigns) do
     preview = selected_move(assigns)
+    # until they pick a card, a player sees on the board where their last move took marbles from
+    last_parts =
+      if assigns.view.last_move && is_nil(assigns.selected_card),
+        do: last_move_parts(assigns.view.last_move),
+        else: []
+
     board = assigns.view.board
     card_moves = card_moves(assigns)
     picking = assigns.view.turn == assigns.color and card_moves != [] and preview == nil
@@ -319,7 +319,13 @@ defmodule JokersWeb.GameLive.Show do
         preview: preview,
         shown_board: if(preview, do: elem(preview, 1), else: board),
         highlight:
-          if(preview, do: changed_marbles(board, elem(preview, 1)), else: assigns.picked),
+          cond do
+            preview -> changed_marbles(board, elem(preview, 1))
+            assigns.picked != [] or assigns.selected_card -> assigns.picked
+            # the marbles the player's last move moved, if they're still where it left them
+            true -> for %{marble: m, to: to} <- last_parts, Board.position(board, m) == to, do: m
+          end,
+        ghosts: for(%{marble: m, from: from} <- last_parts, do: {m, from}),
         clickable:
           if(picking, do: MovePicker.clickable(board, card_moves, assigns.picked), else: []),
         card_moves: card_moves,
@@ -328,7 +334,10 @@ defmodule JokersWeb.GameLive.Show do
 
     ~H"""
     <div class="flex flex-col gap-8 lg:flex-row">
-      <div class="lg:w-3/5">
+      <div class={[
+        "lg:w-3/5 rounded-xl ring-offset-4",
+        @view.turn == @color && "ring-4 ring-amber-400"
+      ]}>
         <.board
           board={@shown_board}
           viewer={@color}
@@ -336,6 +345,7 @@ defmodule JokersWeb.GameLive.Show do
           clickable={@clickable}
           last_played={@view.last_played}
           names={@names}
+          ghosts={@ghosts}
         />
         <p :if={@preview} class="text-center text-sm font-semibold text-zinc-700">
           Preview of your move: the marbles it moves have a thick border.
@@ -388,7 +398,13 @@ defmodule JokersWeb.GameLive.Show do
               Cancel
             </.button>
           </form>
-          <p class="text-xl font-semibold">
+          <%!-- the TurnAlert hook (assets/js/app.js) plays a tone when the turn comes to you --%>
+          <p
+            id="turn-status"
+            phx-hook="TurnAlert"
+            data-my-turn={to_string(@view.turn == @color)}
+            class="text-xl font-semibold"
+          >
             <%= cond do %>
               <% @view.winners -> %>
                 <%= Enum.map_join(@view.winners, " & ", &who(&1, @names)) %> win!
@@ -396,6 +412,13 @@ defmodule JokersWeb.GameLive.Show do
                 Your turn
               <% true -> %>
                 Waiting for <%= who(@view.turn, @names) %>
+            <% end %>
+          </p>
+          <p :if={@view.last_move} id="last-move" class="mt-2 text-sm text-zinc-600">
+            <span class="font-semibold text-zinc-700">Your last move:</span>
+            <%= describe_last_move(@view.last_move) %>
+            <%= if @ghosts != [] do %>
+              On the board, a dashed circle shows where each marble started.
             <% end %>
           </p>
           <.button :if={@view.winners} phx-click="next_game" class="mt-2">Deal the next game</.button>
