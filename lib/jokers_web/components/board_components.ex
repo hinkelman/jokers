@@ -47,10 +47,6 @@ defmodule JokersWeb.BoardComponents do
   attr :last_played, :map, default: %{}
   attr :names, :map, default: %{}
 
-  attr :ghosts, :list,
-    default: [],
-    doc: "{marble, position} pairs: where marbles used to be, drawn as dashed outlines"
-
   def board(assigns) do
     geometry = geometry(assigns.board, assigns.viewer, assigns.names)
 
@@ -119,29 +115,6 @@ defmodule JokersWeb.BoardComponents do
 
       <g :for={{color, {x, y}} <- @geometry.piles}>
         <.svg_card card={@last_played[color]} x={x} y={y} />
-      </g>
-
-      <g :for={{{color, idx}, {x, y}} <- ghost_points(@board, @geometry, @ghosts)} class="ghost">
-        <circle
-          cx={x}
-          cy={y}
-          r={@geometry.hole * 1.15}
-          fill="none"
-          stroke={line_color(color)}
-          stroke-width="2"
-          stroke-dasharray="3 2"
-        />
-        <text
-          x={x}
-          y={y}
-          text-anchor="middle"
-          dominant-baseline="central"
-          font-size="9"
-          font-weight="bold"
-          fill={if color == :yellow, do: "#18181b", else: line_color(color)}
-        >
-          <%= idx + 1 %>
-        </text>
       </g>
 
       <g
@@ -472,13 +445,6 @@ defmodule JokersWeb.BoardComponents do
     end
   end
 
-  # ghosts in the barn aren't drawn: which barn hole a marble used is of no interest
-  defp ghost_points(board, geometry, ghosts) do
-    for {{color, _idx} = marble, position} <- ghosts,
-        position != :barn,
-        do: {marble, position_point(board, geometry, color, position)}
-  end
-
   defp position_point(board, geometry, _color, {:track, _} = position) do
     {side, p} = Board.side_position(board, position)
     track_point(geometry, side, p)
@@ -552,133 +518,6 @@ defmodule JokersWeb.BoardComponents do
   end
 
   defp marble_name({color, idx}), do: "#{color} #{idx + 1}"
-
-  @doc """
-  What a player's last move (see `Jokers.Game`) did, one part per marble it moved: the
-  marble, the step that moved it (nil when a 5th discard in a row brought it out), where it
-  started and ended, and the marbles it hit, with where they went.
-  """
-  def last_move_parts(%{steps: nil, before: before, after: after_move}) do
-    for marble <- changed_marbles(before, after_move) do
-      %{marble: marble, step: nil, from: :barn, to: Board.position(after_move, marble), hits: []}
-    end
-  end
-
-  def last_move_parts(%{steps: steps, before: before}) do
-    # replayed one step at a time, so each part starts where the previous one left the board
-    {parts, _board} =
-      Enum.map_reduce(steps, before, fn step, board ->
-        {:ok, next} = Board.apply_step(board, step)
-        changed = changed_marbles(board, next)
-        marble = step_marble(step, board, changed)
-
-        part = %{
-          marble: marble,
-          step: step,
-          from: Board.position(board, marble),
-          to: Board.position(next, marble),
-          hits: for(hit <- changed -- [marble], do: {hit, Board.position(next, hit)})
-        }
-
-        {part, next}
-      end)
-
-    parts
-  end
-
-  # a marble coming out of the barn is the one of its color that left the barn
-  defp step_marble({:come_out, color}, board, changed), do: came_out(color, board, changed)
-
-  defp step_marble({:joker_teammate, color, _teammate}, board, changed),
-    do: came_out(color, board, changed)
-
-  defp step_marble({_direction_or_joker, marble, _n_or_target}, _board, _changed), do: marble
-
-  defp came_out(color, board, changed) do
-    Enum.find(changed, &(match?({^color, _}, &1) and Board.position(board, &1) == :barn))
-  end
-
-  @doc "Describes a player's last move in words, for that player."
-  def describe_last_move(%{steps: steps, before: board} = last_move) do
-    parts = last_move_parts(last_move)
-
-    case {steps, parts} do
-      {nil, []} ->
-        "You discarded."
-
-      {nil, [%{marble: marble, to: to}]} ->
-        "You discarded, and as it was your 5th discard in a row, " <>
-          "#{marble_name(marble)} came out onto #{place(board, marble, to)}."
-
-      {_steps, parts} ->
-        Enum.map_join(parts, " ", &describe_part(board, &1))
-    end
-  end
-
-  defp describe_part(board, %{marble: marble, from: from, to: to, step: step} = part) do
-    name = marble_name(marble)
-
-    moved =
-      case step do
-        {direction, _marble, n} when direction in [:forward, :backward] ->
-          word = if direction == :forward, do: "forward", else: "back"
-
-          "#{name} moved #{n} #{word}, from #{place(board, marble, from)} to #{place(board, marble, to)}."
-
-        {:joker, _marble, _target} ->
-          "#{name} jumped from #{place(board, marble, from)} to #{place(board, marble, to)}."
-
-        _come_out ->
-          "#{name} came out onto #{place(board, marble, to)}."
-      end
-
-    hits =
-      for {hit, position} <- part.hits do
-        where = if position == :barn, do: "back to the barn", else: "to its home door"
-        " It hit #{marble_name(hit)}, which went #{where}."
-      end
-
-    moved <> Enum.join(hits)
-  end
-
-  # a position in words a player can find on the board: track positions are counted from
-  # the nearest barn or home door
-  defp place(_board, {color, _idx}, {:house, slot}), do: "#{color}'s house slot #{slot}"
-  defp place(_board, {color, _idx}, :barn), do: "#{color}'s barn"
-
-  defp place(board, _marble, {:track, index} = position) do
-    {side, p} = Board.side_position(board, position)
-
-    cond do
-      p == @barn_door ->
-        "#{side}'s barn door"
-
-      p == @home_door ->
-        "#{side}'s home door"
-
-      p < @home_door ->
-        spots(@home_door - p, "before", "#{side}'s home door")
-
-      p <= 5 ->
-        spots(p - @home_door, "past", "#{side}'s home door")
-
-      p < @barn_door ->
-        spots(@barn_door - p, "before", "#{side}'s barn door")
-
-      p <= 14 ->
-        spots(p - @barn_door, "past", "#{side}'s barn door")
-
-      true ->
-        # closer to the next side's home door
-        distance = @side_length + @home_door - p
-        index = rem(index + distance, Board.track_length(board))
-        {next_side, _home_door} = Board.side_position(board, {:track, index})
-        spots(distance, "before", "#{next_side}'s home door")
-    end
-  end
-
-  defp spots(1, word, door), do: "1 spot #{word} #{door}"
-  defp spots(n, word, door), do: "#{n} spots #{word} #{door}"
 
   @doc "The marbles whose position differs between two boards."
   def changed_marbles(before, after_move) do

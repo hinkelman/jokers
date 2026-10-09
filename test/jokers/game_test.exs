@@ -29,14 +29,16 @@ defmodule Jokers.GameTest do
     {:ok, game} = Game.play(game, :red, @queen, [{:come_out, :red}])
     assert Board.position(game.board, {:red, 0}) == Board.barn_door(game.board, :red)
 
-    assert game.last_moves[:red] == %{
-             steps: [{:come_out, :red}],
-             before: before,
-             after: game.board
-           }
+    assert [entry] = Game.view(game, :black).history
 
-    assert Game.view(game, :red).last_move == game.last_moves[:red]
-    assert Game.view(game, :black).last_move == nil
+    assert entry == %{
+             player: :red,
+             card: @queen,
+             discard: false,
+             before: before,
+             after: game.board,
+             last_played: %{red: @queen, black: nil, yellow: nil, blue: nil}
+           }
 
     assert length(game.hands[:red]) == 6
     assert game.discard_piles[:red] == [@queen]
@@ -69,8 +71,9 @@ defmodule Jokers.GameTest do
     assert game.discard_counts == %{red: 4, black: 4, yellow: 4, blue: 4}
     {:ok, game} = Game.discard(game, :red, @five)
     assert Board.position(game.board, {:red, 0}) == Board.barn_door(game.board, :red)
-    assert %{steps: nil, after: after_discard} = game.last_moves[:red]
+    assert [%{player: :red, discard: true, after: after_discard} | _] = game.history
     assert after_discard == game.board
+    assert length(game.history) == 17
     assert game.discard_counts[:red] == 0
     # red can move the marble now
     refute Game.must_discard?(game, :red)

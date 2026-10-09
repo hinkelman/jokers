@@ -8,6 +8,10 @@ defmodule JokersWeb.GameLive.Show do
   previewed on the board until they confirm it. Instead of picking from the list of moves, they
   can click marbles on the board to narrow it down (see `JokersWeb.MovePicker`). Until the next
   player moves, they can take their move back. Seated players can also chat.
+
+  Above the board, arrows step back and forward through the game's moves, showing the board as
+  each one left it. Moves made meanwhile don't change the move being looked at; they only add
+  to the count of moves to come back to.
   """
 
   use JokersWeb, :live_view
@@ -30,7 +34,11 @@ defmodule JokersWeb.GameLive.Show do
          messages: GameServer.messages(id),
          # messages this page has sent, so the chat box can be cleared after each one
          sent: 0,
-         renaming: false
+         renaming: false,
+         # the move whose board is shown (0 for the deal), or nil for the game as it is now
+         step: nil,
+         # how many moves there were when the player last saw the game as it is now
+         seen_moves: 0
        )}
     else
       {:ok,
@@ -107,7 +115,18 @@ defmodule JokersWeb.GameLive.Show do
         %{}
       end
 
+    moves_made = length(view.history)
+
+    step =
+      case socket.assigns[:step] do
+        # an undo or a new deal can leave fewer moves than the one being looked at
+        step when is_integer(step) and moves_made > 0 -> min(step, moves_made)
+        _live_or_new_deal -> nil
+      end
+
     assign(socket,
+      step: step,
+      seen_moves: if(step, do: socket.assigns.seen_moves, else: moves_made),
       # the tab's title says when it's your turn, for players looking at another tab
       page_title:
         if(color && view.turn == color, do: "Your turn! · Jokers", else: "Jokers · #{id}"),
@@ -166,9 +185,31 @@ defmodule JokersWeb.GameLive.Show do
     end
   end
 
+  # picking a card brings the player back to the game as it is now, to play on it
   def handle_event("select_card", %{"index" => index}, socket) do
     {:noreply,
-     assign(socket, selected_card: String.to_integer(index), selected_move: nil, picked: [])}
+     assign(socket,
+       selected_card: String.to_integer(index),
+       selected_move: nil,
+       picked: [],
+       step: nil
+     )}
+  end
+
+  # steps through the moves so far; stepping forward past the latest one goes back to now
+  def handle_event("history", %{"to" => to}, socket) do
+    %{step: step, view: view, color: color} = socket.assigns
+    moves_made = length(view.history)
+
+    step =
+      case to do
+        "back" -> max((step || moves_made + 1) - 1, 0)
+        "forward" when step != nil and step < moves_made -> step + 1
+        "mine" -> my_last_move(view.history, color) || step
+        _forward_or_live -> nil
+      end
+
+    {:noreply, assign(socket, step: step, selected_card: nil, selected_move: nil, picked: [])}
   end
 
   # a marble clicked on the board narrows down the moves; once only one is left, preview it
@@ -302,14 +343,28 @@ defmodule JokersWeb.GameLive.Show do
     """
   end
 
+  def render(%{step: step} = assigns) when step != nil do
+    %{view: view} = assigns
+    entry = if step > 0, do: Enum.at(view.history, step - 1)
+
+    assigns =
+      assign(assigns,
+        shown_board: if(entry, do: entry.after, else: hd(view.history).before),
+        shown_last_played:
+          if(entry, do: entry.last_played, else: Map.new(view.board.seats, &{&1, nil})),
+        # the marbles the move moved, so they're easy to find
+        highlight: if(entry, do: changed_marbles(entry.before, entry.after), else: []),
+        clickable: [],
+        preview: nil,
+        card_moves: [],
+        shown_moves: []
+      )
+
+    game_page(assigns)
+  end
+
   def render(assigns) do
     preview = selected_move(assigns)
-    # until they pick a card, a player sees on the board where their last move took marbles from
-    last_parts =
-      if assigns.view.last_move && is_nil(assigns.selected_card),
-        do: last_move_parts(assigns.view.last_move),
-        else: []
-
     board = assigns.view.board
     card_moves = card_moves(assigns)
     picking = assigns.view.turn == assigns.color and card_moves != [] and preview == nil
@@ -318,19 +373,20 @@ defmodule JokersWeb.GameLive.Show do
       assign(assigns,
         preview: preview,
         shown_board: if(preview, do: elem(preview, 1), else: board),
+        shown_last_played: assigns.view.last_played,
         highlight:
-          cond do
-            preview -> changed_marbles(board, elem(preview, 1))
-            assigns.picked != [] or assigns.selected_card -> assigns.picked
-            # the marbles the player's last move moved, if they're still where it left them
-            true -> for %{marble: m, to: to} <- last_parts, Board.position(board, m) == to, do: m
-          end,
-        ghosts: for(%{marble: m, from: from} <- last_parts, do: {m, from}),
+          if(preview, do: changed_marbles(board, elem(preview, 1)), else: assigns.picked),
         clickable:
           if(picking, do: MovePicker.clickable(board, card_moves, assigns.picked), else: []),
         card_moves: card_moves,
         shown_moves: MovePicker.matching(board, card_moves, assigns.picked)
       )
+
+    game_page(assigns)
+  end
+
+  defp game_page(assigns) do
+    assigns = assign(assigns, my_last_move: my_last_move(assigns.view.history, assigns.color))
 
     ~H"""
     <div class="flex flex-col gap-8 lg:flex-row">
@@ -338,14 +394,70 @@ defmodule JokersWeb.GameLive.Show do
         "lg:w-3/5 rounded-xl ring-offset-4",
         @view.turn == @color && "ring-4 ring-amber-400"
       ]}>
+        <div
+          :if={@view.history != []}
+          id="history"
+          class={[
+            "mb-2 flex flex-wrap items-center gap-2 rounded-lg px-2 py-1 text-sm",
+            if(@step, do: "bg-sky-100 text-sky-950", else: "bg-zinc-100 text-zinc-700")
+          ]}
+        >
+          <button
+            type="button"
+            phx-click="history"
+            phx-value-to="back"
+            disabled={@step == 0}
+            aria-label="Previous move"
+            class="rounded p-1 hover:bg-white/70 disabled:opacity-30"
+          >
+            <.icon name="hero-chevron-left" class="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            phx-click="history"
+            phx-value-to="forward"
+            disabled={@step == nil}
+            aria-label="Next move"
+            class="rounded p-1 hover:bg-white/70 disabled:opacity-30"
+          >
+            <.icon name="hero-chevron-right" class="h-5 w-5" />
+          </button>
+          <span id="history-label" class="min-w-0 flex-1">
+            <%= history_label(@view.history, @step, @color, @names) %>
+          </span>
+          <button
+            :if={@my_last_move && @step != @my_last_move}
+            type="button"
+            phx-click="history"
+            phx-value-to="mine"
+            class="underline hover:no-underline"
+          >
+            My last move
+          </button>
+          <button
+            :if={@step}
+            type="button"
+            phx-click="history"
+            phx-value-to="live"
+            class="rounded-md bg-sky-700 px-2 py-1 font-semibold text-white hover:bg-sky-600"
+          >
+            Back to now
+            <%= case length(@view.history) - @seen_moves do %>
+              <% 0 -> %>
+              <% 1 -> %>
+                (1 new move)
+              <% new -> %>
+                (<%= new %> new moves)
+            <% end %>
+          </button>
+        </div>
         <.board
           board={@shown_board}
           viewer={@color}
           highlight={@highlight}
           clickable={@clickable}
-          last_played={@view.last_played}
+          last_played={@shown_last_played}
           names={@names}
-          ghosts={@ghosts}
         />
         <p :if={@preview} class="text-center text-sm font-semibold text-zinc-700">
           Preview of your move: the marbles it moves have a thick border.
@@ -422,27 +534,6 @@ defmodule JokersWeb.GameLive.Show do
                 Waiting for <%= who(@view.turn, @names) %>
             <% end %>
           </p>
-          <%!-- the description is shown on hover, or on a click for touch screens, since the
-               dashed circles on the board usually say enough --%>
-          <div :if={@view.last_move} id="last-move" class="group relative mt-1 inline-block">
-            <button
-              type="button"
-              phx-click={JS.toggle_class("hidden", to: "#last-move-text")}
-              class="flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-700"
-            >
-              <.icon name="hero-information-circle-mini" class="h-4 w-4" /> Your last move
-            </button>
-            <p
-              id="last-move-text"
-              phx-click-away={JS.add_class("hidden", to: "#last-move-text")}
-              class="absolute left-0 top-full z-10 mt-1 hidden w-80 rounded-lg border border-zinc-200 bg-white p-3 text-sm text-zinc-700 shadow-lg group-hover:block"
-            >
-              <%= describe_last_move(@view.last_move) %>
-              <%= if @ghosts != [] do %>
-                On the board, a dashed circle shows where each marble started.
-              <% end %>
-            </p>
-          </div>
           <.button :if={@view.winners} phx-click="next_game" class="mt-2">Deal the next game</.button>
           <div :if={@view.can_undo} class="mt-3 flex items-center gap-3 text-sm text-zinc-600">
             <span>
@@ -573,6 +664,35 @@ defmodule JokersWeb.GameLive.Show do
       style={"background: #{marble_color(@color)}"}
     />
     """
+  end
+
+  # the number of the player's latest move, counting from 1
+  defp my_last_move(history, color) do
+    history
+    |> Enum.with_index(1)
+    |> Enum.reverse()
+    |> Enum.find_value(fn {entry, n} -> entry.player == color && n end)
+  end
+
+  defp history_label(history, nil, color, names) do
+    "Now · last move: " <> describe_entry(List.last(history), color, names)
+  end
+
+  defp history_label(_history, 0, _color, _names), do: "Start of the game"
+
+  defp history_label(history, step, color, names) do
+    "Move #{step} of #{length(history)}: " <>
+      describe_entry(Enum.at(history, step - 1), color, names)
+  end
+
+  defp describe_entry(entry, color, names) do
+    mover = if entry.player == color, do: "You", else: to_string(who(entry.player, names))
+
+    cond do
+      not entry.discard -> "#{mover} played #{card_name(entry.card)}"
+      entry.before == entry.after -> "#{mover} discarded #{card_name(entry.card)}"
+      true -> "#{mover} discarded #{card_name(entry.card)} (5th in a row, so a marble came out)"
+    end
   end
 
   # a player's name, or their color if they didn't give one

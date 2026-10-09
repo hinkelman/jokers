@@ -40,11 +40,12 @@ Play at **https://jokers-hinkelman.fly.dev/**.
    told when a move is taken back.
 
    The last card each player played or discarded is shown next to their side of the board.
-   Until you pick a card, a dashed circle on the board marks where each marble your last move
-   moved started, so you can count the spots yourself. Hover over or click **Your last move**
-   under the turn line for the same thing in words: how far each marble went, where it started
-   and ended (counted from the nearest barn or home door, like "2 spots past black's barn
-   door"), and any marbles it hit. Only you see your own last move.
+   To see what happened since your turn, use the arrows above the board to step back and
+   forward through the game. Each step shows the board as one move left it, with the marbles that
+   move moved given a thick border, and says who made the move and with which card. **My last
+   move** jumps to your most recent move. Moves made while you look back don't change the board
+   you're looking at; **Back to now** counts them and returns you to the game as it is. Picking a
+   card also takes you back.
 
    When your turn comes, the page plays a short tone, the board gets a yellow ring, and the
    browser tab's title changes to "Your turn!". Browsers only allow sound after you've clicked

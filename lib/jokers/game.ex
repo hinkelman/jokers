@@ -26,9 +26,9 @@ defmodule Jokers.Game do
     last_played: %{},
     # consecutive discards for each player
     discard_counts: %{},
-    # each player's most recent play or discard, so they can see exactly what it did: the
-    # steps (nil for a discard), and the board from before and after it
-    last_moves: %{}
+    # every play and discard this game, newest first, so players can step back through the
+    # game and see what each move did; only what everyone could see goes in, never a hand
+    history: []
   ]
 
   @type t :: %__MODULE__{
@@ -41,10 +41,22 @@ defmodule Jokers.Game do
           discard_piles: %{Board.color() => list(tuple)},
           last_played: %{Board.color() => tuple | nil},
           discard_counts: %{Board.color() => non_neg_integer()},
-          last_moves: %{Board.color() => last_move()}
+          history: list(history_entry())
         }
 
-  @type last_move :: %{steps: list(Board.step()) | nil, before: Board.t(), after: Board.t()}
+  @typedoc """
+  One play or discard: who made it, the card, the board before and after it (they differ after
+  a discard only when a 5th discard in a row brought a marble out), and the last card each
+  player had played once it was over.
+  """
+  @type history_entry :: %{
+          player: Board.color(),
+          card: tuple(),
+          discard: boolean(),
+          before: Board.t(),
+          after: Board.t(),
+          last_played: %{Board.color() => tuple | nil}
+        }
 
   @type error :: :game_over | :not_your_turn | :not_in_hand | :must_play | :illegal_move
 
@@ -105,15 +117,9 @@ defmodule Jokers.Game do
     with :ok <- check_turn(game, player),
          :ok <- check_card(game, player, card),
          {:ok, board} <- Board.play(game.board, player, card, steps) do
-      game = %{
-        game
-        | board: board,
-          discard_counts: Map.put(game.discard_counts, player, 0),
-          last_moves:
-            Map.put(game.last_moves, player, %{steps: steps, before: game.board, after: board})
-      }
-
-      {:ok, end_turn(game, player, card)}
+      before = game.board
+      game = %{game | board: board, discard_counts: Map.put(game.discard_counts, player, 0)}
+      {:ok, game |> end_turn(player, card) |> record(player, card, false, before)}
     end
   end
 
@@ -140,10 +146,7 @@ defmodule Jokers.Game do
           %{game | discard_counts: Map.put(game.discard_counts, player, count)}
         end
 
-      last_move = %{steps: nil, before: before, after: game.board}
-      game = %{game | last_moves: Map.put(game.last_moves, player, last_move)}
-
-      {:ok, end_turn(game, player, card)}
+      {:ok, game |> end_turn(player, card) |> record(player, card, true, before)}
     end
   end
 
@@ -162,9 +165,22 @@ defmodule Jokers.Game do
       hand_sizes: Map.new(game.hands, fn {color, hand} -> {color, length(hand)} end),
       last_played: game.last_played,
       discard_counts: game.discard_counts,
-      # only the player's own last move
-      last_move: game.last_moves[player]
+      # oldest first, to step through in order
+      history: Enum.reverse(game.history)
     }
+  end
+
+  defp record(game, player, card, discard, before) do
+    entry = %{
+      player: player,
+      card: card,
+      discard: discard,
+      before: before,
+      after: game.board,
+      last_played: game.last_played
+    }
+
+    %{game | history: [entry | game.history]}
   end
 
   defp check_turn(%{winners: winners}, _player) when winners != nil, do: {:error, :game_over}

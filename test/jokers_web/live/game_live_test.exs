@@ -97,32 +97,71 @@ defmodule JokersWeb.GameLiveTest do
     assert render(red) =~ "Waiting for black"
     assert render(black) =~ "Your turn"
     assert page_title(black) =~ "Your turn!"
-    # only red is told about red's move
-    assert has_element?(red, "#last-move", "red 1 came out onto red's barn door.")
-    refute has_element?(black, "#last-move")
+    assert has_element?(black, "#history-label", "Now · last move: red played Q♥")
+    assert has_element?(red, "#history-label", "Now · last move: You played Q♥")
   end
 
-  test "a player sees what their last move did", %{conn: conn} do
+  test "stepping back through the moves", %{conn: conn} do
+    id = start_game(deck: List.duplicate(@queen, 162))
+    {:ok, red, _html} = live(conn, ~p"/games/#{id}?color=red")
+    refute has_element?(red, "#history")
+
+    for color <- [:red, :black],
+        do: :ok = GameServer.play(id, color, @queen, [{:come_out, color}])
+
+    red |> element("button[aria-label='Previous move']") |> render_click()
+    assert has_element?(red, "#history-label", "Move 2 of 2: black played Q♥")
+    # black's marble is out, and marked as the one that moved
+    assert has_element?(red, ~s(circle[stroke-width="3.5"]))
+
+    red |> element("button[aria-label='Previous move']") |> render_click()
+    assert has_element?(red, "#history-label", "Move 1 of 2: You played Q♥")
+
+    red |> element("button[aria-label='Previous move']") |> render_click()
+    assert has_element?(red, "#history-label", "Start of the game")
+    assert has_element?(red, "button[aria-label='Previous move'][disabled]")
+
+    # a move made meanwhile doesn't change what red is looking at
+    :ok = GameServer.play(id, :yellow, @queen, [{:come_out, :yellow}])
+    assert has_element?(red, "#history-label", "Start of the game")
+    assert has_element?(red, "button", "(1 new move)")
+
+    red |> element("button", "My last move") |> render_click()
+    assert has_element?(red, "#history-label", "Move 1 of 3: You played Q♥")
+
+    red |> element("button[aria-label='Next move']") |> render_click()
+    red |> element("button[aria-label='Next move']") |> render_click()
+    red |> element("button[aria-label='Next move']") |> render_click()
+    assert has_element?(red, "#history-label", "Now · last move: yellow played Q♥")
+  end
+
+  test "picking a card goes back to the game as it is now", %{conn: conn} do
     id = start_game(deck: List.duplicate(@queen, 162))
 
     for color <- [:red, :black, :yellow, :blue],
         do: :ok = GameServer.play(id, color, @queen, [{:come_out, color}])
 
     {:ok, red, _html} = live(conn, ~p"/games/#{id}?color=red")
-    assert has_element?(red, "#last-move", "red 1 came out onto red's barn door.")
+    red |> element("button", "My last move") |> render_click()
+    assert has_element?(red, "#history-label", "Move 1 of 4")
 
     red |> element("button[phx-value-index=0]", "Q") |> render_click()
-    red |> element("li button", "red 1 forward 10") |> render_click()
-    red |> element("button", "Play this move") |> render_click()
+    assert has_element?(red, "#history-label", "Now")
+    assert has_element?(red, ~s(g[phx-click="pick_marble"]))
+  end
 
-    assert has_element?(
-             red,
-             "#last-move",
-             "red 1 moved 10 forward, from red's barn door to 3 spots before black's home door."
-           )
+  test "an undo moves a player looking at the undone move back", %{conn: conn} do
+    id = start_game(deck: List.duplicate(@queen, 162))
+    {:ok, black, _html} = live(conn, ~p"/games/#{id}?color=black")
 
-    # a dashed circle where the marble started
-    assert has_element?(red, "g.ghost", "1")
+    for color <- [:red, :black],
+        do: :ok = GameServer.play(id, color, @queen, [{:come_out, color}])
+
+    black |> element("button[aria-label='Previous move']") |> render_click()
+    assert has_element?(black, "#history-label", "Move 2 of 2")
+
+    :ok = GameServer.undo(id, :black)
+    assert has_element?(black, "#history-label", "Move 1 of 1: red played Q♥")
   end
 
   test "a player's name is shown to everyone", %{conn: conn} do
