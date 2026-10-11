@@ -3,9 +3,10 @@ defmodule JokersWeb.GameLiveTest do
 
   import Phoenix.LiveViewTest
 
-  alias Jokers.GameServer
+  alias Jokers.{Board, GameServer}
 
   @queen {:hearts, :queen}
+  @five {:clubs, 5}
 
   defp start_game(opts \\ []) do
     id = "test-#{System.unique_integer([:positive])}"
@@ -226,5 +227,28 @@ defmodule JokersWeb.GameLiveTest do
     assert render(red) =~ "Your turn"
     refute has_element?(red, "#hidden-draw")
     assert render(black) =~ "red took back their move."
+  end
+
+  test "the 5th discard only promises a marble when one can come out", %{conn: conn} do
+    conn = init_test_session(conn, %{player_id: "ann"})
+    id = start_game(deck: List.duplicate(@five, 162))
+    [{pid, _}] = Registry.lookup(Jokers.GameRegistry, id)
+    :sys.replace_state(pid, &put_in(&1.game.discard_counts.red, 4))
+
+    {:ok, red, _html} = live(conn, ~p"/games/#{id}?color=red")
+    assert render(red) =~ "so a marble comes out"
+
+    # red's barn is empty: four marbles are home and the last can't move 5 into the full house
+    :sys.replace_state(pid, fn state ->
+      board =
+        Enum.reduce(1..4, state.game.board, &Board.place(&2, {:red, &1}, {:house, &1 + 1}))
+
+      put_in(state.game.board, Board.place(board, {:red, 0}, Board.track(board, :red, 1)))
+    end)
+
+    {:ok, red, _html} = live(conn, ~p"/games/#{id}?color=red")
+    assert render(red) =~ "None of your cards can be played"
+    assert render(red) =~ "but no marble can come out"
+    refute render(red) =~ "so a marble comes out"
   end
 end
