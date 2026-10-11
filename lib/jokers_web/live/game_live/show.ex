@@ -575,7 +575,14 @@ defmodule JokersWeb.GameLive.Show do
           <p>
             None of your cards can be played. Pick a card to discard.
             <%= if @view.discard_counts[@color] == 4 do %>
-              This is your 5th discard in a row, so a marble comes out.
+              <%= if match?(
+                       {:ok, _},
+                       Board.come_out(@view.board, Board.acting_color(@view.board, @color))
+                     ) do %>
+                This is your 5th discard in a row, so a marble comes out.
+              <% else %>
+                This is your 5th discard in a row, but no marble can come out.
+              <% end %>
             <% end %>
           </p>
           <.button :if={@selected_card} phx-click="discard">
