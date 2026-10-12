@@ -10,7 +10,6 @@ defmodule JokersWeb.BoardComponents do
   use Phoenix.Component
 
   alias Jokers.Board
-  alias JokersWeb.MovePicker
 
   # distance between neighboring holes, in SVG units
   @spacing 20
@@ -510,7 +509,7 @@ defmodule JokersWeb.BoardComponents do
   defp describe_step(_board, {:come_out, color}), do: "bring a #{color} marble out"
 
   defp describe_step(board, {:joker, marble, target}) do
-    "#{marble_name(marble)} jumps onto #{marble_name(MovePicker.marble_at(board, target))}"
+    "#{marble_name(marble)} jumps onto #{marble_name(Board.marble_at(board, target))}"
   end
 
   defp describe_step(_board, {:joker_teammate, color, teammate}) do

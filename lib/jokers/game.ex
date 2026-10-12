@@ -130,23 +130,25 @@ defmodule Jokers.Game do
          :ok <- check_card(game, player, card),
          :ok <- if(must_discard?(game, player), do: :ok, else: {:error, :must_play}) do
       before = game.board
-      count = game.discard_counts[player] + 1
-
-      game =
-        if count == @discards_to_come_out do
-          # the 5th discard in a row brings a marble out, if one can come out
-          board =
-            case Board.come_out(game.board, Board.acting_color(game.board, player)) do
-              {:ok, board} -> board
-              :error -> game.board
-            end
-
-          %{game | board: board, discard_counts: Map.put(game.discard_counts, player, 0)}
-        else
-          %{game | discard_counts: Map.put(game.discard_counts, player, count)}
-        end
-
+      game = count_discard(game, player)
       {:ok, game |> end_turn(player, card) |> record(player, card, true, before)}
+    end
+  end
+
+  # the 5th discard in a row brings a marble out, if one can come out, and starts the count again
+  defp count_discard(game, player) do
+    case game.discard_counts[player] + 1 do
+      @discards_to_come_out ->
+        board =
+          case Board.come_out(game.board, Board.acting_color(game.board, player)) do
+            {:ok, board} -> board
+            :error -> game.board
+          end
+
+        %{game | board: board, discard_counts: Map.put(game.discard_counts, player, 0)}
+
+      count ->
+        %{game | discard_counts: Map.put(game.discard_counts, player, count)}
     end
   end
 

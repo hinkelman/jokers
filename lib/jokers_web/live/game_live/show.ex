@@ -3,9 +3,10 @@ defmodule JokersWeb.GameLive.Show do
   A game in progress, seen by one player.
 
   The player's color is in the URL (`/games/:id?color=red`); without it the page asks which
-  color to play, and for a name to show on their side of the board. Opening the page with a color claims that seat for this browser's player id
-  (see `JokersWeb.Router`), and a seat someone else holds can't be taken. On their turn a player picks a card, then one of its legal moves, which is
-  previewed on the board until they confirm it. Instead of picking from the list of moves, they
+  color to play, and for a name to show on their side of the board. Opening the page with a
+  color claims that seat for this browser's player id (see `JokersWeb.Router`), and a seat
+  someone else holds can't be taken. On their turn a player picks a card, then one of its
+  legal moves, which is previewed on the board until they confirm it. Instead of picking from the list of moves, they
   can click marbles on the board to narrow it down (see `JokersWeb.MovePicker`). Until the next
   player moves, they can take their move back. Seated players can also chat.
 
@@ -49,8 +50,7 @@ defmodule JokersWeb.GameLive.Show do
   @impl true
   def handle_params(params, _uri, socket) do
     %{id: id, player_id: player_id} = socket.assigns
-    seats = GameServer.view(id, nil).board.seats
-    color = Enum.find(seats, &(Atom.to_string(&1) == params["color"]))
+    color = seat_color(GameServer.view(id, nil).board, params["color"])
 
     case color && GameServer.claim(id, color, player_id) do
       {:error, :taken} ->
@@ -105,9 +105,10 @@ defmodule JokersWeb.GameLive.Show do
   defp load(socket) do
     %{id: id, color: color} = socket.assigns
     view = GameServer.view(id, color)
+    my_turn = color != nil and view.turn == color
 
     moves =
-      if color && view.turn == color do
+      if my_turn do
         id
         |> GameServer.legal_moves(color)
         |> Map.new(fn {card, card_moves} -> {card, MovePicker.sort(card_moves)} end)
@@ -128,9 +129,9 @@ defmodule JokersWeb.GameLive.Show do
       step: step,
       seen_moves: if(step, do: socket.assigns.seen_moves, else: moves_made),
       # the tab's title says when it's your turn, for players looking at another tab
-      page_title:
-        if(color && view.turn == color, do: "Your turn! · Jokers", else: "Jokers · #{id}"),
+      page_title: if(my_turn, do: "Your turn! · Jokers", else: "Jokers · #{id}"),
       view: view,
+      my_turn: my_turn,
       seats: GameServer.seats(id),
       names: GameServer.names(id),
       moves: moves,
@@ -145,7 +146,7 @@ defmodule JokersWeb.GameLive.Show do
   @impl true
   def handle_event("sit", %{"color" => color, "name" => name}, socket) do
     %{id: id, player_id: player_id, view: view} = socket.assigns
-    color = Enum.find(view.board.seats, &(Atom.to_string(&1) == color))
+    color = seat_color(view.board, color)
 
     case color && GameServer.claim(id, color, player_id, name) do
       :ok ->
@@ -367,7 +368,7 @@ defmodule JokersWeb.GameLive.Show do
     preview = selected_move(assigns)
     board = assigns.view.board
     card_moves = card_moves(assigns)
-    picking = assigns.view.turn == assigns.color and card_moves != [] and preview == nil
+    picking = assigns.my_turn and card_moves != [] and preview == nil
 
     assigns =
       assign(assigns,
@@ -386,13 +387,21 @@ defmodule JokersWeb.GameLive.Show do
   end
 
   defp game_page(assigns) do
-    assigns = assign(assigns, my_last_move: my_last_move(assigns.view.history, assigns.color))
+    %{view: view, color: color} = assigns
+    acting_color = Board.acting_color(view.board, color)
+
+    assigns =
+      assign(assigns,
+        my_last_move: my_last_move(view.history, color),
+        # the teammate whose marbles the player moves, once their own are all home
+        helping: if(acting_color not in [color, nil], do: acting_color)
+      )
 
     ~H"""
     <div class="flex flex-col gap-8 lg:flex-row">
       <div class={[
         "lg:w-3/5 rounded-xl ring-offset-4",
-        @view.turn == @color && "ring-4 ring-amber-400"
+        @my_turn && "ring-4 ring-amber-400"
       ]}>
         <div
           :if={@view.history != []}
@@ -441,14 +450,7 @@ defmodule JokersWeb.GameLive.Show do
             phx-value-to="live"
             class="rounded-md bg-sky-700 px-2 py-1 font-semibold text-white hover:bg-sky-600"
           >
-            Back to now
-            <%= case length(@view.history) - @seen_moves do %>
-              <% 0 -> %>
-              <% 1 -> %>
-                (1 new move)
-              <% new -> %>
-                (<%= new %> new moves)
-            <% end %>
+            Back to now <%= new_moves_note(length(@view.history) - @seen_moves) %>
           </button>
         </div>
         <.board
@@ -472,8 +474,8 @@ defmodule JokersWeb.GameLive.Show do
             <%= if @names[@color] do %>
               as <span class="font-semibold text-zinc-700"><%= @names[@color] %></span>
             <% end %>
-            <%= if Board.acting_color(@view.board, @color) not in [@color, nil] do %>
-              (helping <%= Board.acting_color(@view.board, @color) %>)
+            <%= if @helping do %>
+              (helping <%= @helping %>)
             <% end %>
             ·
             <button
@@ -522,13 +524,13 @@ defmodule JokersWeb.GameLive.Show do
           <p
             id="turn-status"
             phx-hook="TurnAlert"
-            data-my-turn={to_string(@view.turn == @color)}
+            data-my-turn={to_string(@my_turn)}
             class="text-xl font-semibold"
           >
             <%= cond do %>
               <% @view.winners -> %>
                 <%= Enum.map_join(@view.winners, " & ", &who(&1, @names)) %> win!
-              <% @view.turn == @color -> %>
+              <% @my_turn -> %>
                 Your turn
               <% true -> %>
                 Waiting for <%= who(@view.turn, @names) %>
@@ -571,26 +573,19 @@ defmodule JokersWeb.GameLive.Show do
           </p>
         </div>
 
-        <div :if={@view.turn == @color and @must_discard} class="space-y-2">
+        <div :if={@my_turn and @must_discard} class="space-y-2">
           <p>
-            None of your cards can be played. Pick a card to discard.
-            <%= if @view.discard_counts[@color] == 4 do %>
-              <%= if match?(
-                       {:ok, _},
-                       Board.come_out(@view.board, Board.acting_color(@view.board, @color))
-                     ) do %>
-                This is your 5th discard in a row, so a marble comes out.
-              <% else %>
-                This is your 5th discard in a row, but no marble can come out.
-              <% end %>
-            <% end %>
+            None of your cards can be played. Pick a card to discard. <%= fifth_discard_note(
+              @view,
+              @color
+            ) %>
           </p>
           <.button :if={@selected_card} phx-click="discard">
             Discard <%= card_name(Enum.at(@view.hand, @selected_card)) %>
           </.button>
         </div>
 
-        <div :if={@view.turn == @color and not @must_discard and @selected_card} class="space-y-2">
+        <div :if={@my_turn and not @must_discard and @selected_card} class="space-y-2">
           <p :if={@card_moves == []}>That card can't be played right now.</p>
           <p :if={@clickable != []} class="text-sm text-zinc-600">
             Click a marble with a dashed ring, or pick a move below.
@@ -701,6 +696,23 @@ defmodule JokersWeb.GameLive.Show do
       true -> "#{mover} discarded #{card_name(entry.card)} (5th in a row, so a marble came out)"
     end
   end
+
+  defp new_moves_note(0), do: nil
+  defp new_moves_note(1), do: "(1 new move)"
+  defp new_moves_note(count), do: "(#{count} new moves)"
+
+  # a 5th discard in a row brings a marble out, if one can come out
+  defp fifth_discard_note(view, color) do
+    if view.discard_counts[color] == 4 do
+      case Board.come_out(view.board, Board.acting_color(view.board, color)) do
+        {:ok, _board} -> "This is your 5th discard in a row, so a marble comes out."
+        :error -> "This is your 5th discard in a row, but no marble can come out."
+      end
+    end
+  end
+
+  # the seat whose color is named by a string from the URL or a form, or nil
+  defp seat_color(board, name), do: Enum.find(board.seats, &(Atom.to_string(&1) == name))
 
   # a player's name, or their color if they didn't give one
   defp who(color, names), do: names[color] || color

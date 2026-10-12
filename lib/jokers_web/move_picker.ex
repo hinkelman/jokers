@@ -26,10 +26,10 @@ defmodule JokersWeb.MovePicker do
     do: [marble]
 
   defp step_targets(_board, {:come_out, color}), do: [{:barn, color}]
-  defp step_targets(board, {:joker, marble, target}), do: [marble, marble_at(board, target)]
+  defp step_targets(board, {:joker, marble, target}), do: [marble, Board.marble_at(board, target)]
 
   defp step_targets(board, {:joker_teammate, color, teammate}),
-    do: [{:barn, color}, marble_at(board, Board.barn_door(board, teammate))]
+    do: [{:barn, color}, Board.marble_at(board, Board.barn_door(board, teammate))]
 
   @doc """
   Sorts moves for the list shown to the player: by the number of the first marble moved, then
@@ -46,15 +46,6 @@ defmodule JokersWeb.MovePicker do
   defp sort_key({:backward, {_color, idx}, n}), do: {idx, 0, n}
   defp sort_key({:forward, {_color, idx}, n}), do: {idx, 1, n}
   defp sort_key({:joker, {_color, idx}, target}), do: {idx, 2, target}
-
-  @doc "The marble at a position, or nil."
-  @spec marble_at(Board.t(), Board.position()) :: Board.marble() | nil
-  def marble_at(board, position) do
-    Enum.find_value(board.marbles, fn {color, positions} ->
-      idx = Enum.find_index(positions, &(&1 == position))
-      idx && {color, idx}
-    end)
-  end
 
   @doc """
   The indexes (into `moves`) of the moves that start with the clicked marbles, in click order.

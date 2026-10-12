@@ -109,14 +109,19 @@ defmodule Jokers.Board do
     %{board | marbles: Map.update!(board.marbles, color, &List.replace_at(&1, idx, position))}
   end
 
-  defp occupant(board, {:track, _} = position) do
+  @doc """
+  The marble on a track position, or nil. Barns and houses belong to one color, so a position
+  there doesn't say whose marble it is; for those this returns nil.
+  """
+  @spec marble_at(t(), position()) :: marble() | nil
+  def marble_at(board, {:track, _} = position) do
     Enum.find_value(board.marbles, fn {color, positions} ->
-      case Enum.find_index(positions, &(&1 == position)) do
-        nil -> nil
-        idx -> {color, idx}
-      end
+      idx = Enum.find_index(positions, &(&1 == position))
+      idx && {color, idx}
     end)
   end
+
+  def marble_at(_board, _position), do: nil
 
   defp barn_marble(board, color), do: Enum.find_index(board.marbles[color], &(&1 == :barn))
 
@@ -125,11 +130,9 @@ defmodule Jokers.Board do
   @doc "Moves a marble `n` steps. It may pass marbles of other colors but not its own color."
   @spec move(t(), marble(), pos_integer(), :forward | :backward) :: {:ok, t()} | :error
   def move(board, {color, _} = marble, n, direction) do
-    with {:ok, path} <- path(board, color, position(board, marble), n, direction),
-         false <- Enum.any?(path, &(&1 in board.marbles[color])) do
-      {:ok, land(board, marble, List.last(path))}
-    else
-      _ -> :error
+    case path(board, color, position(board, marble), n, direction) do
+      {:ok, path} -> {:ok, land(board, marble, List.last(path))}
+      :error -> :error
     end
   end
 
@@ -155,11 +158,10 @@ defmodule Jokers.Board do
     {:track, door} = home_door(board, color)
 
     with {:track, from} = start <- position(board, marble),
-         {other, _} when other != color <- occupant(board, position),
+         {other, _} when other != color <- marble_at(board, position),
          steps = distance(board, from, target),
          true <- steps <= distance(board, from, door),
-         {:ok, path} <- path(board, color, start, steps, :forward),
-         false <- Enum.any?(path, &(&1 in board.marbles[color])) do
+         {:ok, _path} <- path(board, color, start, steps, :forward) do
       {:ok, land(board, marble, position)}
     else
       _ -> :error
@@ -178,16 +180,17 @@ defmodule Jokers.Board do
     end
   end
 
+  # the positions a marble passes through, ending where it lands; :error if it would run past
+  # the end of its house or pass or land on a marble of its own color
+  defp path(_board, _color, _from, 0, _direction), do: {:ok, []}
+
   defp path(board, color, from, n, direction) do
-    Enum.reduce_while(1..n//1, [from], fn _, [pos | _] = acc ->
-      case next(board, color, pos, direction) do
-        nil -> {:halt, :error}
-        next_pos -> {:cont, [next_pos | acc]}
-      end
-    end)
-    |> case do
-      :error -> :error
-      acc -> {:ok, acc |> Enum.reverse() |> tl()}
+    with pos when pos != nil <- next(board, color, from, direction),
+         false <- pos in board.marbles[color],
+         {:ok, rest} <- path(board, color, pos, n - 1, direction) do
+      {:ok, [pos | rest]}
+    else
+      _ -> :error
     end
   end
 
@@ -208,7 +211,7 @@ defmodule Jokers.Board do
 
   # moves a marble to a position, hitting any marble already on that track position
   defp land(board, {color, _} = marble, position) do
-    target = if match?({:track, _}, position), do: occupant(board, position)
+    target = marble_at(board, position)
     board = place(board, marble, position)
     if target, do: hit(board, target, color, position), else: board
   end

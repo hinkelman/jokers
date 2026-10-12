@@ -101,10 +101,19 @@ defmodule Jokers.GameServer do
   @impl true
   def init({id, player_num, opts}) do
     {idle_timeout, opts} = Keyword.pop(opts, :idle_timeout, @idle_timeout)
-    state = %{id: id, game: Game.new(player_num, opts), seats: %{}, names: %{}, messages: []}
-    # undo is the player who moved last and the game from before their move, while they can
-    # still take it back
-    state = Map.merge(state, %{undo: nil, idle_timeout: idle_timeout})
+
+    state = %{
+      id: id,
+      game: Game.new(player_num, opts),
+      seats: %{},
+      names: %{},
+      messages: [],
+      # the player who moved last and the game from before their move, while they can still
+      # take it back
+      undo: nil,
+      idle_timeout: idle_timeout
+    }
+
     {:ok, state, idle_timeout}
   end
 
@@ -137,7 +146,7 @@ defmodule Jokers.GameServer do
     case state.undo do
       %{player: ^player, game: game} ->
         state = %{state | game: game, undo: nil}
-        Phoenix.PubSub.broadcast(Jokers.PubSub, topic(state.id), {:move_undone, state.id, player})
+        broadcast(state, {:move_undone, state.id, player})
         reply(:ok, state)
 
       _other_player_or_none ->
@@ -164,7 +173,7 @@ defmodule Jokers.GameServer do
 
         cond do
           new_state.seats != state.seats -> broadcast(new_state)
-          new_state.names != state.names -> broadcast(new_state, :names_updated)
+          new_state.names != state.names -> broadcast(new_state, {:names_updated, state.id})
           true -> :nothing_changed
         end
 
@@ -183,6 +192,7 @@ defmodule Jokers.GameServer do
       broadcast(state)
       reply(:ok, state)
     else
+      # someone else holds the color (or nobody does), so there's nothing to give up
       reply(:ok, state)
     end
   end
@@ -200,13 +210,7 @@ defmodule Jokers.GameServer do
       true ->
         message = %{color: color, name: state.names[color], text: text}
         messages = Enum.take([message | state.messages], @max_messages)
-
-        Phoenix.PubSub.broadcast(
-          Jokers.PubSub,
-          topic(state.id),
-          {:chat_message, state.id, message}
-        )
-
+        broadcast(state, {:chat_message, state.id, message})
         reply(:ok, %{state | messages: messages})
     end
   end
@@ -231,14 +235,15 @@ defmodule Jokers.GameServer do
 
   @impl true
   def handle_info(:timeout, state) do
-    Phoenix.PubSub.broadcast(Jokers.PubSub, topic(state.id), {:game_closed, state.id})
+    broadcast(state, {:game_closed, state.id})
     {:stop, :normal, state}
   end
 
   # every reply restarts the idle countdown
   defp reply(result, state), do: {:reply, result, state, state.idle_timeout}
 
-  defp broadcast(state, event \\ :game_updated) do
-    Phoenix.PubSub.broadcast(Jokers.PubSub, topic(state.id), {event, state.id})
-  end
+  defp broadcast(state), do: broadcast(state, {:game_updated, state.id})
+
+  defp broadcast(state, message),
+    do: Phoenix.PubSub.broadcast(Jokers.PubSub, topic(state.id), message)
 end
