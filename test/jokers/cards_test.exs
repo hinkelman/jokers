@@ -5,9 +5,9 @@ defmodule Jokers.CardsTest do
 
   test "card decks" do
     assert length(Cards.suits()) == 4
-    assert length(Cards.cards()) == 13
+    assert length(Cards.ranks()) == 13
     # deck includes two jokers
-    assert length(Cards.deck_single()) == 54
+    assert length(Cards.deck()) == 54
     # three decks used in a game
     assert length(Cards.decks()) == 162
   end

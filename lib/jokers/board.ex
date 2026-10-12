@@ -12,8 +12,6 @@ defmodule Jokers.Board do
   A marble is identified by `{color, index}` where `index` is 0 to 4.
   """
 
-  alias Jokers.Colors
-
   @side_length 18
   @barn_door 8
   @home_door 3
@@ -21,6 +19,11 @@ defmodule Jokers.Board do
   @marble_count 5
 
   # seats are in clockwise (turn) order, so the seat after a player is the player on their left
+  @seats %{
+    4 => [:red, :black, :yellow, :blue],
+    6 => [:red, :black, :yellow, :blue, :white, :green]
+  }
+
   defstruct seats: [], marbles: %{}
 
   @type color :: atom()
@@ -36,8 +39,7 @@ defmodule Jokers.Board do
 
   @spec new(4 | 6) :: t()
   def new(player_num) when player_num in [4, 6] do
-    # Colors.get lists colors counter-clockwise
-    seats = player_num |> Colors.get() |> Enum.reverse()
+    seats = @seats[player_num]
     marbles = Map.new(seats, fn color -> {color, List.duplicate(:barn, @marble_count)} end)
     %__MODULE__{seats: seats, marbles: marbles}
   end
@@ -280,11 +282,9 @@ defmodule Jokers.Board do
 
   defp moves(board, player, color, 9) do
     parts =
-      for f <- 1..8, order <- [:forward_first, :backward_first] do
-        if order == :forward_first,
-          do: {{:forward, f}, {:backward, 9 - f}},
-          else: {{:backward, 9 - f}, {:forward, f}}
-      end
+      for f <- 1..8,
+          part <- [{{:forward, f}, {:backward, 9 - f}}, {{:backward, 9 - f}, {:forward, f}}],
+          do: part
 
     split_moves(board, player, color, parts)
   end

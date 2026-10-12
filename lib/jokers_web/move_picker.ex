@@ -53,10 +53,8 @@ defmodule JokersWeb.MovePicker do
   @spec matching(Board.t(), list({list(Board.step()), Board.t()}), list(Board.marble())) ::
           list(non_neg_integer())
   def matching(board, moves, picked) do
-    picked = Enum.map(picked, &target(board, &1))
-
     for {{steps, _new_board}, index} <- Enum.with_index(moves),
-        Enum.take(targets(board, steps), length(picked)) == picked,
+        targets_left(board, steps, picked) != nil,
         do: index
   end
 
@@ -64,14 +62,21 @@ defmodule JokersWeb.MovePicker do
   @spec clickable(Board.t(), list({list(Board.step()), Board.t()}), list(Board.marble())) ::
           list(Board.marble())
   def clickable(board, moves, picked) do
-    board
-    |> matching(moves, picked)
-    |> Enum.flat_map(fn index ->
-      {steps, _new_board} = Enum.at(moves, index)
-      board |> targets(steps) |> Enum.drop(length(picked)) |> Enum.take(1)
-    end)
-    |> Enum.uniq()
-    |> Enum.flat_map(&marbles(board, &1))
+    for {steps, _new_board} <- moves,
+        [next | _] <- [targets_left(board, steps, picked)],
+        marble <- marbles(board, next),
+        uniq: true,
+        do: marble
+  end
+
+  # the targets still to click for a move, or nil if it doesn't start with the picked marbles
+  defp targets_left(board, steps, picked) do
+    picked = Enum.map(picked, &target(board, &1))
+
+    case Enum.split(targets(board, steps), length(picked)) do
+      {^picked, rest} -> rest
+      _other_move -> nil
+    end
   end
 
   defp marbles(board, {:barn, color}) do

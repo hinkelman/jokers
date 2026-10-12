@@ -117,10 +117,10 @@ defmodule JokersWeb.BoardComponents do
       </g>
 
       <g
-        :for={{marble, {x, y}} <- marble_points(@board, @geometry)}
+        :for={{{color, idx} = marble, {x, y}} <- marble_points(@board, @geometry)}
         phx-click={if marble in @clickable, do: "pick_marble"}
-        phx-value-color={elem(marble, 0)}
-        phx-value-index={elem(marble, 1)}
+        phx-value-color={color}
+        phx-value-index={idx}
         style={if marble in @clickable, do: "cursor: pointer"}
       >
         <circle
@@ -129,7 +129,7 @@ defmodule JokersWeb.BoardComponents do
           cy={y}
           r={@geometry.hole * 1.55}
           fill="none"
-          stroke={emphasis_color(elem(marble, 0))}
+          stroke={emphasis_color(color)}
           stroke-width="1.5"
           stroke-dasharray="3 2"
         />
@@ -137,8 +137,8 @@ defmodule JokersWeb.BoardComponents do
           cx={x}
           cy={y}
           r={@geometry.hole * 1.15}
-          fill={marble_color(elem(marble, 0))}
-          stroke={if marble in @highlight, do: emphasis_color(elem(marble, 0)), else: "#44403c"}
+          fill={marble_color(color)}
+          stroke={if marble in @highlight, do: emphasis_color(color), else: "#44403c"}
           stroke-width={if marble in @highlight, do: 3.5, else: 1}
         />
         <text
@@ -148,9 +148,9 @@ defmodule JokersWeb.BoardComponents do
           dominant-baseline="central"
           font-size="9"
           font-weight="bold"
-          fill={if elem(marble, 0) in [:yellow, :white], do: "#18181b", else: "#fafafa"}
+          fill={if color in [:yellow, :white], do: "#18181b", else: "#fafafa"}
         >
-          <%= elem(marble, 1) + 1 %>
+          <%= idx + 1 %>
         </text>
       </g>
     </svg>

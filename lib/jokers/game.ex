@@ -75,16 +75,16 @@ defmodule Jokers.Game do
     {hands, draw_pile} =
       board.seats
       |> rotate_to(first)
-      |> Enum.reduce({%{}, Keyword.get(opts, :deck, Cards.decks())}, fn color, {hands, pile} ->
+      |> Enum.map_reduce(Keyword.get(opts, :deck, Cards.decks()), fn color, pile ->
         %{hand: hand, draw_pile: pile} = Cards.deal(pile, [])
-        {Map.put(hands, color, hand), pile}
+        {{color, hand}, pile}
       end)
 
     %__MODULE__{
       board: board,
       dealer: dealer,
       turn: first,
-      hands: hands,
+      hands: Map.new(hands),
       draw_pile: draw_pile,
       discard_piles: Map.new(board.seats, &{&1, []}),
       last_played: Map.new(board.seats, &{&1, nil}),

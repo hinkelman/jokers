@@ -1,46 +1,42 @@
 defmodule Jokers.Cards do
-  def suits() do
-    [:hearts, :spades, :clubs, :diamonds]
-  end
+  @moduledoc """
+  The cards: three shuffled decks, each with two jokers. A card is `{suit, rank}`; a joker is
+  `{:red, :joker}` or `{:black, :joker}`.
+  """
 
-  def cards() do
-    [2, 3, 4, 5, 6, 7, 8, 9, 10, :jack, :queen, :king, :ace]
-  end
+  @hand_size 6
 
-  @spec deck_single() :: list(tuple)
-  def deck_single() do
-    x = for suit <- suits(), card <- cards(), do: {suit, card}
-    [{:red, :joker} | [{:black, :joker} | x]]
+  def suits, do: [:hearts, :spades, :clubs, :diamonds]
+
+  def ranks, do: [2, 3, 4, 5, 6, 7, 8, 9, 10, :jack, :queen, :king, :ace]
+
+  @spec deck() :: list(tuple)
+  def deck do
+    [{:red, :joker}, {:black, :joker} | for(suit <- suits(), rank <- ranks(), do: {suit, rank})]
   end
 
   @spec decks() :: list(tuple)
-  def decks() do
-    List.flatten([deck_single(), deck_single(), deck_single()])
-    |> Enum.shuffle()
-  end
+  def decks, do: Enum.shuffle(deck() ++ deck() ++ deck())
 
+  @doc "Fills a hand up to six cards from the top of the draw pile."
   @spec deal(list(tuple), list(tuple)) :: %{draw_pile: list(tuple), hand: list(tuple)}
-  def deal([head | tail], hand) when length(hand) < 6 do
-    deal(tail, [head | hand])
+  def deal(draw_pile, hand) do
+    # only used at the start of a game, so the draw pile never runs out here
+    {dealt, draw_pile} = Enum.split(draw_pile, @hand_size - length(hand))
+    # each card dealt goes on the front of the hand
+    %{draw_pile: draw_pile, hand: Enum.reverse(dealt, hand)}
   end
 
-  def deal(draw_pile, hand) when length(hand) > 5 do
-    # don't need to handle empty list for deal b/c only deal at start of game
-    %{draw_pile: draw_pile, hand: hand}
-  end
-
+  @doc "Draws the top card; an empty draw pile is replaced by the shuffled discard pile first."
   @spec draw(list(tuple), list(tuple), list(tuple)) :: %{
           draw_pile: list(tuple),
           discard_pile: list(tuple),
           hand: list(tuple)
         }
-  def draw([head | tail], hand, discard_pile) do
-    %{draw_pile: tail, hand: [head | hand], discard_pile: discard_pile}
-  end
+  def draw([], hand, discard_pile), do: draw(Enum.shuffle(discard_pile), hand, [])
 
-  def draw([], hand, discard_pile) do
-    x = Enum.shuffle(discard_pile)
-    %{draw_pile: tl(x), hand: [hd(x) | hand], discard_pile: []}
+  def draw([card | draw_pile], hand, discard_pile) do
+    %{draw_pile: draw_pile, hand: [card | hand], discard_pile: discard_pile}
   end
 
   @spec discard(tuple(), list(tuple), list(tuple)) :: %{
