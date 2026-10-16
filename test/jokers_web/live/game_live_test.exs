@@ -229,6 +229,25 @@ defmodule JokersWeb.GameLiveTest do
     assert render(black) =~ "red took back their move."
   end
 
+  test "the end of a game shows a summary for each team", %{conn: conn} do
+    conn = init_test_session(conn, %{player_id: "ann"})
+    id = start_game(deck: List.duplicate(@queen, 162))
+    {:ok, view, _html} = live(conn, ~p"/games/#{id}?color=red")
+    refute has_element?(view, "#game-summary")
+
+    render_click(view, "select_card", %{"index" => "0"})
+    render_click(view, "select_move", %{"index" => "0"})
+    render_click(view, "play")
+
+    [{pid, _}] = Registry.lookup(Jokers.GameRegistry, id)
+    :sys.replace_state(pid, &put_in(&1.game.winners, [:red, :yellow]))
+    {:ok, view, _html} = live(conn, ~p"/games/#{id}?color=red")
+
+    html = view |> element("#game-summary") |> render()
+    assert html =~ "red &amp; yellow"
+    assert html =~ ~r/Face cards played.*?>\s*1\s*<.*?>\s*0\s*</s
+  end
+
   test "the 5th discard only promises a marble when one can come out", %{conn: conn} do
     conn = init_test_session(conn, %{player_id: "ann"})
     id = start_game(deck: List.duplicate(@five, 162))

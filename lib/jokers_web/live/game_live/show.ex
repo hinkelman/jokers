@@ -19,7 +19,7 @@ defmodule JokersWeb.GameLive.Show do
 
   import JokersWeb.BoardComponents
 
-  alias Jokers.{Board, GameServer}
+  alias Jokers.{Board, GameServer, Stats}
   alias JokersWeb.MovePicker
 
   @impl true
@@ -537,6 +537,7 @@ defmodule JokersWeb.GameLive.Show do
             <% end %>
           </p>
           <.button :if={@view.winners} phx-click="next_game" class="mt-2">Deal the next game</.button>
+          <.game_summary :if={@view.winners} view={@view} names={@names} />
           <div :if={@view.can_undo} class="mt-3 flex items-center gap-3 text-sm text-zinc-600">
             <span>
               Changed your mind? You can take your move back until <%= if @view.turn,
@@ -654,6 +655,51 @@ defmodule JokersWeb.GameLive.Show do
         </div>
       </div>
     </div>
+    """
+  end
+
+  attr :view, :map, required: true
+  attr :names, :map, required: true
+
+  defp game_summary(assigns) do
+    board = assigns.view.board
+
+    assigns =
+      assign(assigns,
+        teams: Enum.map([0, 1], &(board.seats |> Enum.drop(&1) |> Enum.take_every(2))),
+        stats: Stats.teams(board, assigns.view.history)
+      )
+
+    ~H"""
+    <table id="game-summary" class="mt-4 w-full text-sm">
+      <thead>
+        <tr class="border-b border-zinc-200 text-left">
+          <th class="py-1 font-normal text-zinc-500">This game</th>
+          <th :for={team <- @teams} class="py-1 text-right font-semibold">
+            <%= Enum.map_join(team, " & ", &who(&1, @names)) %>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr
+          :for={
+            {label, key} <- [
+              {"Jokers played", :jokers},
+              {"Aces played", :aces},
+              {"Face cards played", :faces},
+              {"8s played", :eights},
+              {"9s played", :nines},
+              {"Marbles knocked out", :knockouts},
+              {"Discards", :discards}
+            ]
+          }
+          class="border-b border-zinc-100"
+        >
+          <td class="py-1 text-zinc-600"><%= label %></td>
+          <td :for={stats <- @stats} class="py-1 text-right tabular-nums"><%= stats[key] %></td>
+        </tr>
+      </tbody>
+    </table>
     """
   end
 

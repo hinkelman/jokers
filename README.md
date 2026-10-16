@@ -53,8 +53,10 @@ Play at **https://jokers-hinkelman.fly.dev/**.
    the page to check that you can hear it.
 5. **No playable cards?** The page tells you, and you pick a card to discard. Your 5th discard in
    a row brings a marble out.
-6. **Winning.** When a team gets all its marbles home, the game ends. Click **Deal the next game**
-   to play again; the deal passes to the left.
+6. **Winning.** When a team gets all its marbles home, the game ends. A table shows how many
+   jokers, aces, face cards, 8s and 9s each team played, how many marbles each team knocked out
+   and how many times each team had to discard. Click **Deal the next game** to play again; the
+   deal passes to the left.
 
 Every player's screen updates as soon as anyone moves. Seated players can send messages to each
 other in the chat box beside the board. The chat keeps the last 100 messages.
