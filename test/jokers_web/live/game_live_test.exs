@@ -267,7 +267,7 @@ defmodule JokersWeb.GameLiveTest do
 
     {:ok, red, _html} = live(conn, ~p"/games/#{id}?color=red")
     assert render(red) =~ "None of your cards can be played"
-    assert render(red) =~ "but no marble can come out"
+    assert render(red) =~ "This is your 5th discard in a row."
     refute render(red) =~ "so a marble comes out"
   end
 end

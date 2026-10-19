@@ -752,7 +752,7 @@ defmodule JokersWeb.GameLive.Show do
     if view.discard_counts[color] == 4 do
       case Board.come_out(view.board, Board.acting_color(view.board, color)) do
         {:ok, _board} -> "This is your 5th discard in a row, so a marble comes out."
-        :error -> "This is your 5th discard in a row, but no marble can come out."
+        :error -> "This is your 5th discard in a row."
       end
     end
   end
