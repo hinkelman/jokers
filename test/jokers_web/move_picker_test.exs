@@ -32,6 +32,35 @@ defmodule JokersWeb.MovePickerTest do
     assert Enum.all?(both, &(&1 in first))
   end
 
+  test "a split is listed in one order when the order doesn't matter", %{board: board} do
+    board =
+      board
+      |> Board.place({:red, 0}, Board.track(board, :red, 8))
+      |> Board.place({:red, 1}, Board.track(board, :black, 0))
+
+    moves = board |> Board.legal_moves(:red, {:spades, 9}) |> MovePicker.sort()
+    listed = for index <- MovePicker.matching(board, moves, []), do: Enum.at(moves, index)
+
+    # 8 sizes for each of the two marbles going forward, each in one order
+    assert length(moves) == 32
+    assert length(listed) == 16
+    assert Enum.all?(listed, fn {[{_, {:red, idx}, _} | _], _} -> idx == 0 end)
+
+    # clicking the second marble first still finds the other order
+    assert length(MovePicker.matching(board, moves, [{:red, 1}])) == 16
+  end
+
+  test "a split is listed both ways when the order matters", %{board: board} do
+    red_first = [{:forward, {:red, 0}, 5}, {:backward, {:red, 1}, 4}]
+    red_second = Enum.reverse(red_first)
+    other_board = Board.place(board, {:black, 0}, Board.track(board, :black, 0))
+
+    assert MovePicker.matching(board, [{red_first, board}, {red_second, other_board}], []) ==
+             [0, 1]
+
+    assert MovePicker.matching(board, [{red_first, board}, {red_second, board}], []) == [0]
+  end
+
   test "moves are sorted by marble, then backward before forward", %{board: board} do
     board =
       board

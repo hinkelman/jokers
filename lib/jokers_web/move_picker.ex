@@ -49,13 +49,20 @@ defmodule JokersWeb.MovePicker do
 
   @doc """
   The indexes (into `moves`) of the moves that start with the clicked marbles, in click order.
+
+  A split played in the other order is left out when it makes the same steps and leaves the
+  board the same, so only splits whose order matters are listed both ways. The left-out order
+  can still be picked by clicking its marbles.
   """
   @spec matching(Board.t(), list({list(Board.step()), Board.t()}), list(Board.marble())) ::
           list(non_neg_integer())
   def matching(board, moves, picked) do
-    for {{steps, _new_board}, index} <- Enum.with_index(moves),
-        targets_left(board, steps, picked) != nil,
-        do: index
+    for {{steps, new_board}, index} <- Enum.with_index(moves),
+        targets_left(board, steps, picked) != nil do
+      {{Enum.sort(steps), new_board}, index}
+    end
+    |> Enum.uniq_by(fn {key, _index} -> key end)
+    |> Enum.map(fn {_key, index} -> index end)
   end
 
   @doc "The marbles that can be clicked next."
