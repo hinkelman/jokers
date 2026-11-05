@@ -2,7 +2,7 @@
 
 A web version of Jokers, a marble-and-card board game for two teams of 2 or 3 players, so
 family members can play together from different places. The full rules are in
-[RULES.md](RULES.md).
+[RULES.md](RULES.md), and tips for new players are in [STRATEGY.md](STRATEGY.md).
 
 Play at **https://jokers-hinkelman.fly.dev/**.
 

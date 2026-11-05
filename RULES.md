@@ -121,3 +121,7 @@ A marble is hit only when another marble **lands** on it. Passing it doesn't cou
 - You can't move a teammate's marbles before all of yours are home, except for the rest of a 7
   or the backward part of a 9 when your last marble goes into your last house slot.
 - A team wins when all of its players' marbles are in their houses.
+
+## Strategy
+
+For tips on playing well, see [STRATEGY.md](STRATEGY.md).
