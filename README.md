@@ -6,6 +6,8 @@ family members can play together from different places. The full rules are in
 
 Play at **https://jokers-hinkelman.fly.dev/**.
 
+![A 4-player game in progress, seen from the red seat: the board on the left, your hand and the chat on the right](docs/screenshot.png)
+
 > **About the code:** Most of this code was written by Claude, an AI model from Anthropic, using
 > Claude Code. No human has reviewed it. The rules in RULES.md come from the game as our family
 > plays it. The exceptions are `lib/jokers/cards.ex`, `lib/jokers/colors.ex` and early versions
